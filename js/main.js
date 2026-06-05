@@ -11,7 +11,7 @@ import { Renderer } from './renderer.js';
 const isLocal = location.hostname === 'localhost' || location.hostname === '127.0.0.1';
 const SERVER_URL = isLocal
   ? 'ws://localhost:3000'
-  : 'wss://REPLACE-ME.up.railway.app';
+  : 'wss://nightfall-production.up.railway.app';
 
 const canvas = document.getElementById('game');
 const $ = (id) => document.getElementById(id);
