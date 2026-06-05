@@ -45,7 +45,7 @@ wss.on('connection', (ws) => {
   ws.on('close', () => room.removePlayer(id));
   ws.on('error', () => {});  // a dropped socket should not crash the process
 
-  ws.send(JSON.stringify({ t: 'welcome', id }));
+  ws.send(JSON.stringify({ t: 'welcome', you: id }));
 });
 
 setInterval(() => room.update(), 1000 / TICK_RATE);
