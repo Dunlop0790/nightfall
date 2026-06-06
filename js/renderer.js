@@ -99,7 +99,7 @@ export class Renderer {
       // prompt when the local survivor is standing in it
       if (o === inRange) {
         ctx.fillStyle = COLORS.prompt;
-        ctx.font = '12px monospace';
+        ctx.font = '12px Bungee, monospace';
         ctx.textAlign = 'center';
         ctx.fillText('HOLD SPACE', ox, oy - r - 8);
         ctx.textAlign = 'left';

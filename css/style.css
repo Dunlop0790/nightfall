@@ -20,7 +20,7 @@ html, body {
   height: 100%;
   background: var(--bg);
   color: var(--ink);
-  font-family: "SFMono-Regular", "Consolas", "Liberation Mono", Menlo, monospace;
+  font-family: 'Bungee', 'SFMono-Regular', 'Consolas', monospace;
   overflow: hidden;
 }
 
