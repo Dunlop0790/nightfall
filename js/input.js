@@ -1,8 +1,12 @@
-// Keyboard movement + action, mouse aim for the flashlight. Calls onChange
-// whenever the movement/action booleans flip, so main can push input to the
-// server only on change instead of every frame.
+// Tracks movement, action, attack, lunge, and mouse aim. State is polled by
+// main and sent to the server at a fixed rate, so there is no change callback.
+//
+// Space is the universal "do" button: the server reads it as repair for a
+// survivor and as attack for the killer. Mouse left-click also attacks. Shift
+// lunges (killer only). Aim follows the mouse, measured from screen centre,
+// since the focused player is always drawn at the centre.
 
-const KEYMAP = {
+const MOVE = {
   KeyW: 'up', ArrowUp: 'up',
   KeyS: 'down', ArrowDown: 'down',
   KeyA: 'left', ArrowLeft: 'left',
@@ -10,37 +14,32 @@ const KEYMAP = {
 };
 
 export class Input {
-  constructor(canvas, onChange) {
-    this.state = { up: false, down: false, left: false, right: false, action: false };
-    this.aim = 0;            // radians, flashlight direction
-    this.onChange = onChange;
+  constructor(canvas) {
+    this.state = { up: false, down: false, left: false, right: false, action: false, attack: false, lunge: false };
+    this.aim = 0;
 
     window.addEventListener('keydown', (e) => this.setKey(e, true));
     window.addEventListener('keyup', (e) => this.setKey(e, false));
 
-    // Aim is measured from the screen centre, since the local player is always
-    // drawn at the centre of the canvas.
     canvas.addEventListener('mousemove', (e) => {
-      const rect = canvas.getBoundingClientRect();
-      const mx = e.clientX - rect.left;
-      const my = e.clientY - rect.top;
-      this.aim = Math.atan2(my - rect.height / 2, mx - rect.width / 2);
+      const r = canvas.getBoundingClientRect();
+      this.aim = Math.atan2(e.clientY - r.top - r.height / 2, e.clientX - r.left - r.width / 2);
     });
+    canvas.addEventListener('mousedown', (e) => { if (e.button === 0) this.state.attack = true; });
+    window.addEventListener('mouseup', (e) => { if (e.button === 0) this.state.attack = false; });
+    canvas.addEventListener('contextmenu', (e) => e.preventDefault());
   }
 
   setKey(e, down) {
-    let changed = false;
-    const dir = KEYMAP[e.code];
-    if (dir) {
-      if (this.state[dir] !== down) { this.state[dir] = down; changed = true; }
+    const dir = MOVE[e.code];
+    if (dir) { this.state[dir] = down; e.preventDefault(); }
+    if (e.code === 'Space' || e.code === 'KeyE') {
+      this.state.action = down;
+      if (e.code === 'Space') this.state.attack = down;
       e.preventDefault();
     }
-    if (e.code === 'Space' || e.code === 'KeyE' || e.code === 'ShiftLeft') {
-      if (this.state.action !== down) { this.state.action = down; changed = true; }
-      e.preventDefault();
-    }
-    if (changed) this.onChange(this.snapshot());
+    if (e.code === 'ShiftLeft' || e.code === 'ShiftRight') { this.state.lunge = down; e.preventDefault(); }
   }
 
-  snapshot() { return { ...this.state }; }
+  snapshot() { return { ...this.state, aim: Math.round(this.aim * 100) / 100 }; }
 }

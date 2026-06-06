@@ -1,11 +1,12 @@
-// Map construction. The layout is built procedurally but deterministically so
-// the grid dimensions are always correct (no hand-counting walls). Objective
-// positions are sampled fresh each round so survivors can't memorize them.
+// Map construction. Built procedurally but deterministically so dimensions are
+// always correct. Bigger and less symmetric than the first pass: rooms of mixed
+// sizes, L-shaped cover, scattered pillars, and open "anchor" tiles used for
+// clustered spawns. Objective spots are sampled fresh each round.
 
 import { TILE, OBJECTIVES_TO_WIN } from './constants.js';
 
-const COLS = 31;
-const ROWS = 19;
+const COLS = 45;
+const ROWS = 29;
 
 function blankGrid() {
   const g = [];
@@ -20,35 +21,44 @@ function blankGrid() {
   return g;
 }
 
-// Draw the outline of a rectangular room.
-function room(g, x, y, w, h) {
+function roomOutline(g, x, y, w, h) {
   for (let i = 0; i < w; i++) { g[y][x + i] = '#'; g[y + h - 1][x + i] = '#'; }
   for (let j = 0; j < h; j++) { g[y + j][x] = '#'; g[y + j][x + w - 1] = '#'; }
 }
-
+function hWall(g, x, y, len) { for (let i = 0; i < len; i++) g[y][x + i] = '#'; }
+function vWall(g, x, y, len) { for (let j = 0; j < len; j++) g[y + j][x] = '#'; }
 function open(g, x, y) { g[y][x] = '.'; }
 
 function buildGrid() {
   const g = blankGrid();
 
-  // Central block (the heart of the map, several doorways).
-  room(g, 12, 6, 8, 7);
-  open(g, 14, 6); open(g, 17, 6);
-  open(g, 12, 9); open(g, 19, 9);
-  open(g, 15, 12); open(g, 16, 12);
+  // Rooms of varied sizes scattered without mirror symmetry. Each gets one or
+  // two door gaps punched after the outline is drawn.
+  roomOutline(g, 3, 3, 9, 6);    open(g, 11, 5); open(g, 6, 8);
+  roomOutline(g, 16, 2, 7, 8);   open(g, 16, 5); open(g, 19, 9);
+  roomOutline(g, 30, 3, 11, 5);  open(g, 30, 5); open(g, 36, 7);
+  roomOutline(g, 4, 13, 8, 9);   open(g, 11, 17); open(g, 7, 21);
+  roomOutline(g, 33, 11, 8, 7);  open(g, 33, 14); open(g, 37, 17);
+  roomOutline(g, 25, 14, 7, 6);  open(g, 28, 14); open(g, 25, 17);
+  roomOutline(g, 15, 20, 10, 7); open(g, 19, 20); open(g, 24, 23);
+  roomOutline(g, 30, 21, 11, 6); open(g, 35, 21); open(g, 30, 24);
 
-  // Four corner rooms, each with a door punched out toward the open floor.
-  room(g, 3, 3, 6, 5);  open(g, 8, 5);  open(g, 5, 7);
-  room(g, 22, 3, 6, 5); open(g, 22, 5); open(g, 25, 7);
-  room(g, 3, 11, 6, 5); open(g, 5, 11); open(g, 8, 13);
-  room(g, 22, 11, 6, 5); open(g, 25, 11); open(g, 22, 13);
+  // L-shaped cover and loose segments to break long sightlines.
+  hWall(g, 14, 12, 6); vWall(g, 14, 12, 4);
+  hWall(g, 25, 9, 5);
+  vWall(g, 22, 13, 5);
+  hWall(g, 6, 24, 5);
+  hWall(g, 43 - 8, 9, 5);
+  vWall(g, 12, 24, 3);
+  hWall(g, 26, 25, 4);
 
-  // Loose cover walls to create chase loops in the open lanes. Kept clear of
-  // spawns and doorways.
-  g[4][13] = '#'; g[4][14] = '#'; g[4][16] = '#'; g[4][17] = '#';
-  g[14][13] = '#'; g[14][14] = '#'; g[14][16] = '#'; g[14][17] = '#';
-  g[6][10] = '#'; g[7][10] = '#';
-  g[11][20] = '#'; g[12][20] = '#';
+  // Single-tile pillars for cover in the open lanes.
+  const pillars = [
+    [20, 6], [38, 10], [9, 11], [27, 4], [41, 13],
+    [13, 16], [21, 16], [35, 9], [18, 25], [29, 12],
+    [6, 18], [42, 22],
+  ];
+  for (const [px, py] of pillars) g[py][px] = '#';
 
   return g;
 }
@@ -57,26 +67,29 @@ function center(tx, ty) {
   return { x: tx * TILE + TILE / 2, y: ty * TILE + TILE / 2 };
 }
 
-// Tile coords used for spawns. These must land on floor in the layout above.
-const KILLER_SPAWN_TILE = { x: 15, y: 9 };
-const SURVIVOR_SPAWN_TILES = [
-  { x: 2, y: 2 },
-  { x: 28, y: 2 },
-  { x: 2, y: 16 },
-  { x: 28, y: 16 },
-  { x: 15, y: 2 },
-  { x: 15, y: 16 },
-  { x: 2, y: 9 },
-];
-
-function chebyshev(a, b) {
-  return Math.max(Math.abs(a.x - b.x), Math.abs(a.y - b.y));
+function isOpen3x3(grid, x, y) {
+  for (let dy = -1; dy <= 1; dy++) {
+    for (let dx = -1; dx <= 1; dx++) {
+      if (grid[y + dy][x + dx] === '#') return false;
+    }
+  }
+  return true;
 }
 
-// A tile is a valid objective spot if it is floor, not hugging a wall, and
-// not sitting on top of a spawn point.
+// Spread-out open tiles used as spawn cluster anchors.
+function spawnAnchors(grid) {
+  const out = [];
+  for (let y = 3; y < ROWS - 3; y += 4) {
+    for (let x = 3; x < COLS - 3; x += 4) {
+      if (isOpen3x3(grid, x, y)) out.push({ x, y });
+    }
+  }
+  return out;
+}
+
+function chebyshev(a, b) { return Math.max(Math.abs(a.x - b.x), Math.abs(a.y - b.y)); }
+
 function objectiveCandidates(grid) {
-  const spawns = [KILLER_SPAWN_TILE, ...SURVIVOR_SPAWN_TILES];
   const out = [];
   for (let y = 2; y < ROWS - 2; y++) {
     for (let x = 2; x < COLS - 2; x++) {
@@ -85,8 +98,6 @@ function objectiveCandidates(grid) {
         grid[y - 1][x] === '#' || grid[y + 1][x] === '#' ||
         grid[y][x - 1] === '#' || grid[y][x + 1] === '#';
       if (wallNeighbor) continue;
-      const tooCloseToSpawn = spawns.some(s => chebyshev({ x, y }, s) <= 2);
-      if (tooCloseToSpawn) continue;
       out.push({ x, y });
     }
   }
@@ -95,41 +106,46 @@ function objectiveCandidates(grid) {
 
 export function buildMap() {
   const grid = buildGrid();
-
-  // Sanity: every authored spawn must be on floor. Fail fast if the layout
-  // and the spawn list ever drift apart.
-  if (grid[KILLER_SPAWN_TILE.y][KILLER_SPAWN_TILE.x] !== '.') {
-    throw new Error('Killer spawn is not on floor');
-  }
-  for (const s of SURVIVOR_SPAWN_TILES) {
-    if (grid[s.y][s.x] !== '.') {
-      throw new Error(`Survivor spawn ${s.x},${s.y} is not on floor`);
-    }
-  }
+  const anchors = spawnAnchors(grid);
+  if (anchors.length < 2) throw new Error('Map has too few open spawn anchors');
 
   const candidates = objectiveCandidates(grid);
   if (candidates.length < OBJECTIVES_TO_WIN) {
     throw new Error('Map has too few objective candidate tiles');
   }
 
-  // tiles: array of row strings ('#' wall, '.' floor) sent to the client.
   const tiles = grid.map(row => row.join(''));
 
   return {
     cols: COLS,
     rows: ROWS,
-    grid,                                   // 2D array, server-side collision
-    tiles,                                  // row strings, sent to client
-    killerSpawn: center(KILLER_SPAWN_TILE.x, KILLER_SPAWN_TILE.y),
-    survivorSpawns: SURVIVOR_SPAWN_TILES.map(s => center(s.x, s.y)),
+    grid,
+    tiles,
+    anchors,                // tile coords, open 3x3 areas
     objectiveCandidates: candidates,
   };
 }
 
-// Pick N distinct objective spots, spaced out so they aren't clustered.
+// Pick survivor + killer spawn anchors. Survivors cluster on one anchor; the
+// killer takes the anchor farthest from them so the round never opens with the
+// killer on top of the group.
+export function pickSpawns(map) {
+  const a = map.anchors;
+  const survivor = a[Math.floor(Math.random() * a.length)];
+  let killer = a[0];
+  let best = -1;
+  for (const c of a) {
+    const d = chebyshev(c, survivor);
+    if (d > best) { best = d; killer = c; }
+  }
+  return {
+    survivorAnchor: center(survivor.x, survivor.y),
+    killerAnchor: center(killer.x, killer.y),
+  };
+}
+
 export function sampleObjectives(map, n) {
   const pool = [...map.objectiveCandidates];
-  // shuffle
   for (let i = pool.length - 1; i > 0; i--) {
     const j = Math.floor(Math.random() * (i + 1));
     [pool[i], pool[j]] = [pool[j], pool[i]];
@@ -137,10 +153,8 @@ export function sampleObjectives(map, n) {
   const chosen = [];
   for (const tile of pool) {
     if (chosen.length >= n) break;
-    const spaced = chosen.every(c => chebyshev(c, tile) >= 4);
-    if (spaced) chosen.push(tile);
+    if (chosen.every(c => chebyshev(c, tile) >= 6)) chosen.push(tile);
   }
-  // If spacing was too strict to fill N, top up with whatever is left.
   for (const tile of pool) {
     if (chosen.length >= n) break;
     if (!chosen.includes(tile)) chosen.push(tile);

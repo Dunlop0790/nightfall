@@ -64,13 +64,16 @@ Use `wss://` (secure), not `ws://`, since GitHub Pages is HTTPS.
 ## Controls
 
 - WASD or arrow keys to move
-- Survivor: aim the flashlight with the mouse, hold Space (or E) near an objective to work it
-- Killer: walk into a survivor to catch them
+- Mouse aims (flashlight for survivors, attack direction for the killer)
+- Survivor: hold Space (or E) on a generator to repair it. Two survivors on the same generator repair faster.
+- Killer: Space or left-click to swing (short cooldown), Shift to lunge forward on a longer cooldown. Both deal damage; a hit knocks the survivor back.
+
+Survivors take three hits to go down. A downed survivor switches to spectator mode and can press A or D to cycle which living player they watch.
 
 ## How to win
 
 - Survivors complete 3 objectives -> survivors escape and win
-- Killer catches every survivor -> killer wins
+- Killer downs every survivor -> killer wins (downing one while others live does not end the round)
 - Killer disconnects -> survivors win
 - All survivors leave -> killer wins
 

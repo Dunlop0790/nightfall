@@ -200,6 +200,13 @@ button:disabled {
 
 .role.killer { background: rgba(210,72,61,0.2); color: var(--killer); }
 .role.survivor { background: rgba(74,144,217,0.2); color: var(--survivor); }
+.role.dead { background: rgba(120,124,140,0.2); color: var(--muted); }
+
+.pips {
+  letter-spacing: 2px;
+  color: var(--survivor);
+  font-size: 15px;
+}
 
 .hint {
   margin-left: auto;
