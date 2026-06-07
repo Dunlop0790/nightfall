@@ -208,6 +208,15 @@ button:disabled {
   font-size: 15px;
 }
 
+.sprint {
+  font-size: 12px;
+  padding: 2px 8px;
+  border-radius: 4px;
+}
+.sprint.ready { background: rgba(87,179,104,0.2); color: var(--you); }
+.sprint.active { background: rgba(87,179,104,0.35); color: #a0ffb0; }
+.sprint.cooldown { background: rgba(120,124,140,0.2); color: var(--muted); }
+
 .hint {
   margin-left: auto;
   color: var(--muted);
