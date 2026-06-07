@@ -33,3 +33,8 @@ export const OBJECTIVES_TO_WIN = 3;
 
 export const MIN_PLAYERS_TO_START = 2;
 export const MAX_PLAYERS = 8;
+
+// Sprint: a speed burst available to all players on a cooldown.
+export const SPRINT_MULTIPLIER = 1.55;  // speed factor while sprinting
+export const SPRINT_DURATION = 2.2;     // seconds the burst lasts
+export const SPRINT_COOLDOWN = 5.0;     // seconds before sprint is ready again

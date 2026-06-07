@@ -5,6 +5,7 @@ import {
   DT, KILLER_RADIUS, SURVIVOR_RADIUS, KILLER_SPEED, SURVIVOR_SPEED,
   SURVIVOR_HP, ATTACK_RANGE, ATTACK_ARC, ATTACK_COOLDOWN, HIT_INVULN, KNOCKBACK,
   LUNGE_SPEED, LUNGE_DURATION, LUNGE_COOLDOWN,
+  SPRINT_MULTIPLIER, SPRINT_DURATION, SPRINT_COOLDOWN,
   OBJECTIVE_RADIUS, OBJECTIVE_TIME, OBJECTIVE_MAX_RATE, OBJECTIVES_TO_WIN,
   MIN_PLAYERS_TO_START,
 } from './constants.js';
@@ -70,6 +71,9 @@ export class Room {
       invulnUntil: 0,
       swing: false,
       lastAim: Math.PI / 2,  // default facing down
+      sprintState: 'ready',  // 'ready' | 'active' | 'cooldown'
+      sprintUntil: 0,
+      sprintCooldownUntil: 0,
     });
     if (this.phase === PHASE.PLAYING) this.sendTo(id, { t: 'wait' });
     this.broadcastLobby();
@@ -136,6 +140,9 @@ export class Room {
       pl.lungeHitDone = false;
       pl.invulnUntil = 0;
       pl.swing = false;
+      pl.sprintState = 'ready';
+      pl.sprintUntil = 0;
+      pl.sprintCooldownUntil = 0;
 
       if (pid === id) {
         pl.role = 'killer';
@@ -171,7 +178,9 @@ export class Room {
       lungeDuration: LUNGE_DURATION,
       lungeCooldown: LUNGE_COOLDOWN,
       attackCooldown: ATTACK_COOLDOWN,
-      objectiveRadius: OBJECTIVE_RADIUS,
+      sprintMultiplier: SPRINT_MULTIPLIER,
+      sprintDuration: SPRINT_DURATION,
+      sprintCooldown: SPRINT_COOLDOWN,
       objectiveTime: OBJECTIVE_TIME,
       objectivesToWin: OBJECTIVES_TO_WIN,
     };
@@ -199,6 +208,10 @@ export class Room {
 
     const killer = [...this.players.values()].find(p => p.role === 'killer');
     if (killer) this.handleKillerActions(killer);
+
+    for (const p of this.players.values()) {
+      if (p.role !== null) this.tickSprint(p);
+    }
 
     for (const p of this.players.values()) {
       if (p.role === null) continue;
@@ -297,6 +310,26 @@ export class Room {
     this.applyInputMove(s, SURVIVOR_SPEED, SURVIVOR_RADIUS);
   }
 
+  tickSprint(p) {
+    if (p.sprintState === 'active' && this.elapsed >= p.sprintUntil) {
+      p.sprintState = 'cooldown';
+      p.sprintCooldownUntil = this.elapsed + SPRINT_COOLDOWN;
+    } else if (p.sprintState === 'cooldown' && this.elapsed >= p.sprintCooldownUntil) {
+      p.sprintState = 'ready';
+    }
+    // Start sprint on key press if ready (not while lunging).
+    const notLunging = p.role !== 'killer' || this.elapsed >= p.lungeUntil;
+    if (p.input.sprint && p.sprintState === 'ready' && notLunging) {
+      p.sprintState = 'active';
+      p.sprintUntil = this.elapsed + SPRINT_DURATION;
+    }
+    // Release key early -> end sprint and start cooldown.
+    if (!p.input.sprint && p.sprintState === 'active') {
+      p.sprintState = 'cooldown';
+      p.sprintCooldownUntil = this.elapsed + SPRINT_COOLDOWN;
+    }
+  }
+
   applyInputMove(p, speed, radius) {
     const grid = this.map.grid;
     let dx = (p.input.right ? 1 : 0) - (p.input.left ? 1 : 0);
@@ -310,9 +343,10 @@ export class Room {
     dy = Math.sin(angle);
 
     if (p.role === 'survivor') p.lastAim = angle;
-    const nx = p.x + dx * speed * DT;
+    const actualSpeed = speed * (p.sprintState === 'active' ? SPRINT_MULTIPLIER : 1);
+    const nx = p.x + dx * actualSpeed * DT;
     if (fits(grid, nx, p.y, radius)) p.x = nx;
-    const ny = p.y + dy * speed * DT;
+    const ny = p.y + dy * actualSpeed * DT;
     if (fits(grid, p.x, ny, radius)) p.y = ny;
   }
 
@@ -366,6 +400,7 @@ export class Room {
       if (p.role === 'survivor') entry.hp = p.hp;
       const aimVal = p.role === 'killer' ? p.input.aim : p.lastAim;
       entry.aim = Math.round(aimVal * 100) / 100;
+      entry.sprint = p.sprintState;
       if (p.role === 'killer') {
         entry.swing = p.swing;
         entry.lunging = this.elapsed < p.lungeUntil;
