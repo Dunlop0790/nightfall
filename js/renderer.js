@@ -60,13 +60,59 @@ export class Renderer {
       killer: this.loadImg('sprites/killer.png'),
       survivor: this.loadImg('sprites/survivor.png'),
     };
+    // Background-removed versions of the character sheets (floor/wall stay solid).
+    this.keyed = { killer: null, survivor: null };
+    const keyWhenReady = (name) => {
+      const img = this.imgs[name];
+      const run = () => { this.keyed[name] = this.removeBackground(img); };
+      if (img.complete && img.naturalWidth > 0) run();
+      else img.addEventListener('load', run);
+    };
+    keyWhenReady('killer');
+    keyWhenReady('survivor');
 
     this.resize();
     window.addEventListener('resize', () => this.resize());
   }
 
   loadImg(src) { const i = new Image(); i.src = src; return i; }
-  ready(img) { return img.complete && img.naturalWidth > 0; }
+  ready(img) { return img && (img.complete ? img.naturalWidth > 0 : img.width > 0); }
+
+  // Make the sprite background transparent. Flood-fills from the edges keying
+  // out pixels close to the corner colour, so interior dark pixels (eyes,
+  // outlines) are kept. If the sheet already has alpha, it is left untouched.
+  removeBackground(img) {
+    const W = img.naturalWidth, H = img.naturalHeight;
+    const c = document.createElement('canvas');
+    c.width = W; c.height = H;
+    const cx = c.getContext('2d');
+    cx.drawImage(img, 0, 0);
+    const data = cx.getImageData(0, 0, W, H);
+    const px = data.data;
+    if (px[3] === 0) return c; // already transparent
+
+    const br = px[0], bg = px[1], bb = px[2];
+    const tol = 42;
+    const isBg = (i) => Math.abs(px[i] - br) < tol && Math.abs(px[i + 1] - bg) < tol && Math.abs(px[i + 2] - bb) < tol;
+
+    const visited = new Uint8Array(W * H);
+    const stack = [];
+    for (let x = 0; x < W; x++) { stack.push(x, 0, x, H - 1); }
+    for (let y = 0; y < H; y++) { stack.push(0, y, W - 1, y); }
+    while (stack.length) {
+      const y = stack.pop(), x = stack.pop();
+      if (x < 0 || y < 0 || x >= W || y >= H) continue;
+      const idx = y * W + x;
+      if (visited[idx]) continue;
+      visited[idx] = 1;
+      const i = idx * 4;
+      if (!isBg(i)) continue;
+      px[i + 3] = 0;
+      stack.push(x + 1, y, x - 1, y, x, y + 1, x, y - 1);
+    }
+    cx.putImageData(data, 0, 0);
+    return c;
+  }
 
   resize() {
     this.w = this.canvas.width = window.innerWidth;
@@ -194,9 +240,10 @@ export class Renderer {
           ctx.arc(px, py, SWING_RADIUS, facing - SWING_ARC, facing + SWING_ARC);
           ctx.closePath(); ctx.fill();
         }
-        if (this.ready(this.imgs.killer)) {
+        if (this.keyed.killer) {
           const [col, row] = killerFrame(dir);
-          this.drawSprite(this.imgs.killer, col * KILL_SIZE, row * KILL_SIZE, KILL_SIZE, KILL_SIZE, px, py, null, 0);
+          this.drawSprite(this.keyed.killer, col * KILL_SIZE, row * KILL_SIZE, KILL_SIZE, KILL_SIZE, px, py, null, 0);
+          if (p.self) this.selfRing(px, py, KILL_SIZE / 2 + 3);
         } else {
           ctx.fillStyle = COLORS.killer;
           ctx.beginPath(); ctx.arc(px, py, game.config.killerRadius, 0, Math.PI * 2); ctx.fill();
@@ -213,12 +260,14 @@ export class Renderer {
       const tint = frac >= 0.999 ? null : hpColor(frac);
       const tintAlpha = (1 - frac) * 0.5;
 
-      if (this.ready(this.imgs.survivor)) {
+      if (this.keyed.survivor) {
         const frameX = survivorFrame(dir);
-        this.drawSprite(this.imgs.survivor, frameX, 0, SURV_SIZE, SURV_SIZE, px, py, tint, tintAlpha);
+        this.drawSprite(this.keyed.survivor, frameX, 0, SURV_SIZE, SURV_SIZE, px, py, tint, tintAlpha);
+        if (p.self) this.selfRing(px, py, SURV_SIZE / 2 + 3);
       } else {
         ctx.fillStyle = p.self ? COLORS.self : (tint || '#4ea3ff');
         ctx.beginPath(); ctx.arc(px, py, game.config.survivorRadius, 0, Math.PI * 2); ctx.fill();
+        if (p.self) this.selfRing(px, py, game.config.survivorRadius + 3);
       }
     }
   }
@@ -243,6 +292,15 @@ export class Renderer {
       sc.globalCompositeOperation = 'source-over';
     }
     this.ctx.drawImage(this.scratch, 0, 0, sw, sh, dx, dy, sw, sh);
+  }
+
+  selfRing(px, py, r) {
+    const ctx = this.ctx;
+    ctx.strokeStyle = COLORS.self;
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc(Math.round(px), Math.round(py), r, 0, Math.PI * 2);
+    ctx.stroke();
   }
 
   drawFog(mode, aim) {

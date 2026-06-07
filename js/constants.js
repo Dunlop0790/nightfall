@@ -22,7 +22,7 @@ export const COLORS = {
   objective: '#ffd23f',
   objectiveDone: '#43b85f',
   ring: '#ffd23f',
-  ringTrack: '#3a3d2a',
+  ringTrack: 'rgba(255,210,63,0.4)',
   prompt: '#ffe8a3',
 };
 
