@@ -31,6 +31,7 @@ export class Input {
   }
 
   setKey(e, down) {
+    if (document.activeElement && document.activeElement.tagName === 'INPUT') return;
     const dir = MOVE[e.code];
     if (dir) { this.state[dir] = down; e.preventDefault(); }
     if (e.code === 'Space' || e.code === 'KeyE') {

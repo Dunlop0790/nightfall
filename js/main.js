@@ -9,7 +9,7 @@ import { Renderer } from './renderer.js';
 const isLocal = location.hostname === 'localhost' || location.hostname === '127.0.0.1';
 const SERVER_URL = isLocal ? 'ws://localhost:3000' : 'wss://nightfall-production.up.railway.app';
 
-const INPUT_RATE = 50; // ms between input sends (20 Hz)
+const INPUT_RATE = 33; // ms between input sends (~30 Hz, matches server tick)
 
 const canvas = document.getElementById('game');
 const $ = (id) => document.getElementById(id);
@@ -146,7 +146,7 @@ function ensureLoop() {
 }
 
 function frame(now) {
-  const dt = Math.min(0.05, (now - lastTime) / 1000);
+  const dt = Math.min(0.033, (now - lastTime) / 1000);
   lastTime = now;
   if (game.config && game.map) {
     game.predict(dt, input.snapshot());

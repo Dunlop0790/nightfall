@@ -9,9 +9,8 @@ export const SELF_GLOW = 70;           // px glow around a survivor
 export const SPECTATE_VIEW = 320;      // px radius when watching as a ghost
 export const FOG_ALPHA = 0.985;
 
-// Smoothing. A touch snappier than before so server-side shoves (knockback)
-// and the killer's lunge converge quickly without obvious rubber-banding.
-export const CORRECTION = 0.28;
+// Smoothing. Snappy correction so knockback and server nudges resolve quickly.
+export const CORRECTION = 0.35;
 
 export const COLORS = {
   floor: '#13141a',
