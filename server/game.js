@@ -69,6 +69,7 @@ export class Room {
       lungeHitDone: false,
       invulnUntil: 0,
       swing: false,
+      lastAim: Math.PI / 2,  // default facing down
     });
     if (this.phase === PHASE.PLAYING) this.sendTo(id, { t: 'wait' });
     this.broadcastLobby();
@@ -303,6 +304,7 @@ export class Room {
     if (dx === 0 && dy === 0) return;
     const len = Math.hypot(dx, dy);
     dx /= len; dy /= len;
+    if (p.role === 'survivor') p.lastAim = Math.atan2(dy, dx);
     const nx = p.x + dx * speed * DT;
     if (fits(grid, nx, p.y, radius)) p.x = nx;
     const ny = p.y + dy * speed * DT;
@@ -357,10 +359,11 @@ export class Room {
         alive: p.alive,
       };
       if (p.role === 'survivor') entry.hp = p.hp;
+      const aimVal = p.role === 'killer' ? p.input.aim : p.lastAim;
+      entry.aim = Math.round(aimVal * 100) / 100;
       if (p.role === 'killer') {
         entry.swing = p.swing;
         entry.lunging = this.elapsed < p.lungeUntil;
-        entry.aim = Math.round(p.input.aim * 100) / 100;
       }
       out.push(entry);
     }

@@ -1,8 +1,3 @@
-// Draws the world, then a fog overlay with a soft gradient hole for what the
-// focused player can see. Killer: wide circle fogging out with distance.
-// Survivor: flashlight cone plus a small body glow. Spectator (downed): a
-// neutral circle around whoever is being watched.
-
 import {
   KILLER_VIEW, FLASH_RANGE, FLASH_HALF_ANGLE, SELF_GLOW, SPECTATE_VIEW, FOG_ALPHA,
   COLORS, hpColor,
@@ -11,26 +6,59 @@ import {
 const SWING_RADIUS = 46;
 const SWING_ARC = 0.7;
 
+// Survivor sheet: 128x32, 4 frames left-to-right: down, right, up, left
+const SURV_FRAMES = { down: 0, right: 1, up: 2, left: 3 };
+const SURV_SIZE = 32;
+
+// Killer sheet: 96x96, 2x2 grid, 48x48 per frame
+// [ right(col0,row0) ] [ up(col1,row0)   ]
+// [ left(col0,row1)  ] [ down(col1,row1) ]
+const KILL_FRAMES = {
+  right: [0, 0], up: [1, 0], left: [0, 1], down: [1, 1],
+};
+const KILL_SIZE = 48;
+
+function facingDir(aim) {
+  const a = ((aim % (Math.PI * 2)) + Math.PI * 2) % (Math.PI * 2);
+  if (a < Math.PI / 4 || a >= 7 * Math.PI / 4) return 'right';
+  if (a < 3 * Math.PI / 4) return 'down';
+  if (a < 5 * Math.PI / 4) return 'left';
+  return 'up';
+}
+
 export class Renderer {
   constructor(canvas) {
     this.canvas = canvas;
     this.ctx = canvas.getContext('2d');
     this.fog = document.createElement('canvas');
     this.fogCtx = this.fog.getContext('2d');
+    // scratch canvas for hp-tinted sprite compositing
+    this.scratch = document.createElement('canvas');
+    this.scratch.width = 64; this.scratch.height = 64;
+    this.scratchCtx = this.scratch.getContext('2d');
+
+    this.imgs = {
+      floor: this.loadImg('sprites/floor.png'),
+      killer: this.loadImg('sprites/killer.png'),
+      survivor: this.loadImg('sprites/survivor.png'),
+    };
+
     this.resize();
     window.addEventListener('resize', () => this.resize());
   }
 
+  loadImg(src) { const i = new Image(); i.src = src; return i; }
+  ready(img) { return img.complete && img.naturalWidth > 0; }
+
   resize() {
     this.w = this.canvas.width = window.innerWidth;
     this.h = this.canvas.height = window.innerHeight;
-    this.fog.width = this.w;
-    this.fog.height = this.h;
+    this.fog.width = this.w; this.fog.height = this.h;
   }
 
   draw(game, input, now) {
     const ctx = this.ctx;
-    const tile = 32;
+    const TILE = 32;
     const focus = game.focusPos(now);
     const camX = focus.x - this.w / 2;
     const camY = focus.y - this.h / 2;
@@ -40,24 +68,40 @@ export class Renderer {
     ctx.fillStyle = COLORS.floor;
     ctx.fillRect(0, 0, this.w, this.h);
 
-    const x0 = Math.max(0, Math.floor(camX / tile) - 1);
-    const x1 = Math.min(game.map.cols, Math.ceil((camX + this.w) / tile) + 1);
-    const y0 = Math.max(0, Math.floor(camY / tile) - 1);
-    const y1 = Math.min(game.map.rows, Math.ceil((camY + this.h) / tile) + 1);
+    const x0 = Math.max(0, Math.floor(camX / TILE) - 1);
+    const x1 = Math.min(game.map.cols, Math.ceil((camX + this.w) / TILE) + 1);
+    const y0 = Math.max(0, Math.floor(camY / TILE) - 1);
+    const y1 = Math.min(game.map.rows, Math.ceil((camY + this.h) / TILE) + 1);
+
+    // floor tiles
+    for (let ty = y0; ty < y1; ty++) {
+      const row = game.map.tiles[ty];
+      for (let tx = x0; tx < x1; tx++) {
+        if (row[tx] !== '#') {
+          if (this.ready(this.imgs.floor)) {
+            ctx.drawImage(this.imgs.floor, sx(tx * TILE), sy(ty * TILE), TILE, TILE);
+          } else {
+            ctx.fillStyle = COLORS.floor;
+            ctx.fillRect(sx(tx * TILE), sy(ty * TILE), TILE, TILE);
+          }
+        }
+      }
+    }
 
     // grid
-    ctx.strokeStyle = COLORS.grid;
-    ctx.lineWidth = 1;
+    ctx.strokeStyle = COLORS.grid; ctx.lineWidth = 1;
     ctx.beginPath();
-    for (let tx = x0; tx <= x1; tx++) { ctx.moveTo(sx(tx * tile), sy(y0 * tile)); ctx.lineTo(sx(tx * tile), sy(y1 * tile)); }
-    for (let ty = y0; ty <= y1; ty++) { ctx.moveTo(sx(x0 * tile), sy(ty * tile)); ctx.lineTo(sx(x1 * tile), sy(ty * tile)); }
+    for (let tx = x0; tx <= x1; tx++) { ctx.moveTo(sx(tx * TILE), sy(y0 * TILE)); ctx.lineTo(sx(tx * TILE), sy(y1 * TILE)); }
+    for (let ty = y0; ty <= y1; ty++) { ctx.moveTo(sx(x0 * TILE), sy(ty * TILE)); ctx.lineTo(sx(x1 * TILE), sy(ty * TILE)); }
     ctx.stroke();
 
     // walls
     ctx.fillStyle = COLORS.wall;
     for (let ty = y0; ty < y1; ty++) {
       const row = game.map.tiles[ty];
-      for (let tx = x0; tx < x1; tx++) if (row[tx] === '#') ctx.fillRect(sx(tx * tile), sy(ty * tile), tile, tile);
+      for (let tx = x0; tx < x1; tx++) {
+        if (row[tx] === '#') ctx.fillRect(sx(tx * TILE), sy(ty * TILE), TILE, TILE);
+      }
     }
 
     this.drawObjectives(game, sx, sy);
@@ -79,14 +123,12 @@ export class Renderer {
         ctx.beginPath(); ctx.arc(ox, oy, r, 0, Math.PI * 2); ctx.stroke();
         continue;
       }
-      // filled progress disc
       if (o.progress > 0) {
         ctx.fillStyle = 'rgba(255,210,63,0.18)';
         ctx.beginPath(); ctx.moveTo(ox, oy);
         ctx.arc(ox, oy, r - 3, -Math.PI / 2, -Math.PI / 2 + o.progress * Math.PI * 2);
         ctx.closePath(); ctx.fill();
       }
-      // range ring + progress arc
       ctx.strokeStyle = COLORS.ringTrack; ctx.lineWidth = 3;
       ctx.beginPath(); ctx.arc(ox, oy, r, 0, Math.PI * 2); ctx.stroke();
       if (o.progress > 0) {
@@ -96,7 +138,6 @@ export class Renderer {
       ctx.fillStyle = COLORS.objective;
       ctx.beginPath(); ctx.arc(ox, oy, 7, 0, Math.PI * 2); ctx.fill();
 
-      // prompt when the local survivor is standing in it
       if (o === inRange) {
         ctx.fillStyle = COLORS.prompt;
         ctx.font = '12px Bungee, monospace';
@@ -112,10 +153,14 @@ export class Renderer {
     const maxHp = game.config.survivorHp;
     for (const p of game.renderPlayers(now)) {
       const px = sx(p.x), py = sy(p.y);
-      const radius = p.role === 'killer' ? game.config.killerRadius : game.config.survivorRadius;
-      const facing = p.self && game.role === 'killer' ? input.aim : (p.aim || 0);
+      const isKiller = p.role === 'killer';
+      const facing = (p.self && isKiller) ? input.aim
+        : (p.self && !isKiller) ? input.aim
+        : (p.aim || 0);
+      const dir = facingDir(facing);
 
-      if (p.role === 'survivor' && !p.alive) {
+      if (!p.alive) {
+        // downed marker
         ctx.strokeStyle = COLORS.dead; ctx.lineWidth = 3;
         ctx.beginPath();
         ctx.moveTo(px - 7, py - 7); ctx.lineTo(px + 7, py + 7);
@@ -124,60 +169,83 @@ export class Renderer {
         continue;
       }
 
-      if (p.role === 'killer') {
-        // lunge trail behind the facing direction
-        if (p.lunging) {
-          for (let i = 1; i <= 3; i++) {
-            ctx.fillStyle = `rgba(210,72,61,${0.18 / i})`;
-            ctx.beginPath();
-            ctx.arc(px - Math.cos(facing) * i * 12, py - Math.sin(facing) * i * 12, radius, 0, Math.PI * 2);
-            ctx.fill();
-          }
-        }
-        ctx.fillStyle = COLORS.killer;
-        ctx.beginPath(); ctx.arc(px, py, radius, 0, Math.PI * 2); ctx.fill();
-        // facing tick
-        ctx.strokeStyle = COLORS.killer; ctx.lineWidth = 3;
-        ctx.beginPath(); ctx.moveTo(px, py);
-        ctx.lineTo(px + Math.cos(facing) * (radius + 10), py + Math.sin(facing) * (radius + 10));
-        ctx.stroke();
-        // swing arc flash
+      if (isKiller) {
         if (p.swing) {
           ctx.fillStyle = 'rgba(255,150,140,0.35)';
           ctx.beginPath(); ctx.moveTo(px, py);
           ctx.arc(px, py, SWING_RADIUS, facing - SWING_ARC, facing + SWING_ARC);
           ctx.closePath(); ctx.fill();
         }
+        if (this.ready(this.imgs.killer)) {
+          const [col, row] = KILL_FRAMES[dir];
+          this.drawSprite(this.imgs.killer, col * KILL_SIZE, row * KILL_SIZE, KILL_SIZE, KILL_SIZE, px, py, null, 0);
+        } else {
+          ctx.fillStyle = COLORS.killer;
+          ctx.beginPath(); ctx.arc(px, py, game.config.killerRadius, 0, Math.PI * 2); ctx.fill();
+          ctx.strokeStyle = COLORS.killer; ctx.lineWidth = 3;
+          ctx.beginPath(); ctx.moveTo(px, py);
+          ctx.lineTo(px + Math.cos(facing) * (game.config.killerRadius + 10), py + Math.sin(facing) * (game.config.killerRadius + 10));
+          ctx.stroke();
+        }
         continue;
       }
 
       // survivor
-      const frac = maxHp ? Math.max(0, p.hp) / maxHp : 1;
-      ctx.fillStyle = p.self ? COLORS.self : hpColor(frac);
-      ctx.beginPath(); ctx.arc(px, py, radius, 0, Math.PI * 2); ctx.fill();
-      if (p.self) {
-        ctx.strokeStyle = COLORS.self; ctx.lineWidth = 2;
-        ctx.beginPath(); ctx.arc(px, py, radius + 3, 0, Math.PI * 2); ctx.stroke();
+      const frac = maxHp ? Math.max(0, p.hp ?? maxHp) / maxHp : 1;
+      const tint = frac >= 0.999 ? null : hpColor(frac);
+      const tintAlpha = (1 - frac) * 0.5;
+
+      if (this.ready(this.imgs.survivor)) {
+        const frameX = SURV_FRAMES[dir] * SURV_SIZE;
+        this.drawSprite(this.imgs.survivor, frameX, 0, SURV_SIZE, SURV_SIZE, px, py, tint, tintAlpha);
+        if (p.self) {
+          ctx.strokeStyle = COLORS.self; ctx.lineWidth = 2;
+          ctx.beginPath(); ctx.arc(px, py, SURV_SIZE / 2 + 3, 0, Math.PI * 2); ctx.stroke();
+        }
+      } else {
+        ctx.fillStyle = p.self ? COLORS.self : (tint || '#4ea3ff');
+        ctx.beginPath(); ctx.arc(px, py, game.config.survivorRadius, 0, Math.PI * 2); ctx.fill();
+        if (p.self) {
+          ctx.strokeStyle = COLORS.self; ctx.lineWidth = 2;
+          ctx.beginPath(); ctx.arc(px, py, game.config.survivorRadius + 3, 0, Math.PI * 2); ctx.stroke();
+        }
       }
     }
+  }
+
+  // Draw a sprite frame to an offscreen scratch canvas, apply hp tint via
+  // source-atop compositing, then blit to the main canvas. Requires the
+  // sprite PNG to have a transparent background (standard Piskel export).
+  drawSprite(img, sx, sy, sw, sh, cx, cy, tintColor, tintAlpha) {
+    const sc = this.scratchCtx;
+    sc.clearRect(0, 0, sw, sh);
+    sc.globalCompositeOperation = 'source-over';
+    sc.globalAlpha = 1;
+    sc.drawImage(img, sx, sy, sw, sh, 0, 0, sw, sh);
+    if (tintColor && tintAlpha > 0.01) {
+      sc.globalCompositeOperation = 'source-atop';
+      sc.fillStyle = tintColor;
+      sc.globalAlpha = tintAlpha;
+      sc.fillRect(0, 0, sw, sh);
+      sc.globalAlpha = 1;
+      sc.globalCompositeOperation = 'source-over';
+    }
+    this.ctx.drawImage(this.scratch, 0, 0, sw, sh, cx - sw / 2, cy - sh / 2, sw, sh);
   }
 
   drawFog(mode, aim) {
     const f = this.fogCtx;
     const cx = this.w / 2, cy = this.h / 2;
-
     f.globalCompositeOperation = 'source-over';
     f.clearRect(0, 0, this.w, this.h);
     f.fillStyle = `rgba(4,5,9,${FOG_ALPHA})`;
     f.fillRect(0, 0, this.w, this.h);
     f.globalCompositeOperation = 'destination-out';
-
     if (mode === 'killer') {
       this.radialHole(f, cx, cy, KILLER_VIEW, [[0, 1], [0.5, 0.9], [0.85, 0.35], [1, 0]]);
     } else if (mode === 'spectate') {
       this.radialHole(f, cx, cy, SPECTATE_VIEW, [[0, 1], [0.7, 0.6], [1, 0]]);
     } else {
-      // survivor: body glow + flashlight cone
       this.radialHole(f, cx, cy, SELF_GLOW, [[0, 0.92], [1, 0]]);
       f.save();
       f.beginPath(); f.moveTo(cx, cy);
@@ -186,7 +254,6 @@ export class Renderer {
       this.radialHole(f, cx, cy, FLASH_RANGE, [[0, 1], [0.6, 0.7], [1, 0]]);
       f.restore();
     }
-
     f.globalCompositeOperation = 'source-over';
   }
 
