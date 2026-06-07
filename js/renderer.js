@@ -88,12 +88,6 @@ export class Renderer {
       }
     }
 
-    // grid
-    ctx.strokeStyle = COLORS.grid; ctx.lineWidth = 1;
-    ctx.beginPath();
-    for (let tx = x0; tx <= x1; tx++) { ctx.moveTo(sx(tx * TILE), sy(y0 * TILE)); ctx.lineTo(sx(tx * TILE), sy(y1 * TILE)); }
-    for (let ty = y0; ty <= y1; ty++) { ctx.moveTo(sx(x0 * TILE), sy(ty * TILE)); ctx.lineTo(sx(x1 * TILE), sy(ty * TILE)); }
-    ctx.stroke();
 
     // walls
     ctx.fillStyle = COLORS.wall;
