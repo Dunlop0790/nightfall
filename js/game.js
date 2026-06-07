@@ -88,8 +88,9 @@ export class Game {
     let dx = (input.right ? 1 : 0) - (input.left ? 1 : 0);
     let dy = (input.down ? 1 : 0) - (input.up ? 1 : 0);
     if (dx === 0 && dy === 0) return;
-    const len = Math.hypot(dx, dy);
-    dx /= len; dy /= len;
+    const angle = Math.round(Math.atan2(dy, dx) / (Math.PI / 4)) * (Math.PI / 4);
+    dx = Math.cos(angle);
+    dy = Math.sin(angle);
     const nx = this.local.x + dx * speed * dt;
     if (this.fits(nx, this.local.y, r)) this.local.x = nx;
     const ny = this.local.y + dy * speed * dt;
