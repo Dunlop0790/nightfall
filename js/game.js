@@ -20,6 +20,10 @@ export class Game {
     this.localAlive = true;
     this.localHp = 0;
     this.spectateId = null;
+    this.sprintState = 'ready';
+    this.sprintUntil = 0;
+    this.sprintCooldownUntil = 0;
+    this.clientElapsed = 0;
   }
 
   onInit(msg) {
@@ -36,6 +40,10 @@ export class Game {
     this.localAlive = true;
     this.localHp = msg.config.survivorHp;
     this.spectateId = null;
+    this.sprintState = 'ready';
+    this.sprintUntil = 0;
+    this.sprintCooldownUntil = 0;
+    this.clientElapsed = 0;
   }
 
   onState(msg) {
@@ -83,7 +91,28 @@ export class Game {
 
   predict(dt, input) {
     if (!this.local || !this.localAlive) return;
-    const speed = this.role === 'killer' ? this.config.killerSpeed : this.config.survivorSpeed;
+    this.clientElapsed += dt;
+    const e = this.clientElapsed;
+    const cfg = this.config;
+
+    // Mirror server sprint state machine so local movement feels instant.
+    if (this.sprintState === 'active' && e >= this.sprintUntil) {
+      this.sprintState = 'cooldown';
+      this.sprintCooldownUntil = e + cfg.sprintCooldown;
+    } else if (this.sprintState === 'cooldown' && e >= this.sprintCooldownUntil) {
+      this.sprintState = 'ready';
+    }
+    if (input.sprint && this.sprintState === 'ready') {
+      this.sprintState = 'active';
+      this.sprintUntil = e + cfg.sprintDuration;
+    }
+    if (!input.sprint && this.sprintState === 'active') {
+      this.sprintState = 'cooldown';
+      this.sprintCooldownUntil = e + cfg.sprintCooldown;
+    }
+
+    const baseSpeed = this.role === 'killer' ? cfg.killerSpeed : cfg.survivorSpeed;
+    const speed = baseSpeed * (this.sprintState === 'active' ? cfg.sprintMultiplier : 1);
     const r = this.radiusOf(this.role);
     let dx = (input.right ? 1 : 0) - (input.left ? 1 : 0);
     let dy = (input.down ? 1 : 0) - (input.up ? 1 : 0);
@@ -95,6 +124,13 @@ export class Game {
     if (this.fits(nx, this.local.y, r)) this.local.x = nx;
     const ny = this.local.y + dy * speed * dt;
     if (this.fits(this.local.x, ny, r)) this.local.y = ny;
+  }
+
+  sprintInfo() {
+    const e = this.clientElapsed;
+    if (this.sprintState === 'active') return { state: 'active', remaining: Math.max(0, this.sprintUntil - e) };
+    if (this.sprintState === 'cooldown') return { state: 'cooldown', remaining: Math.max(0, this.sprintCooldownUntil - e) };
+    return { state: 'ready', remaining: 0 };
   }
 
   // ---- read for rendering ----
