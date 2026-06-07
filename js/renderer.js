@@ -6,24 +6,34 @@ import {
 const SWING_RADIUS = 46;
 const SWING_ARC = 0.7;
 
-// Survivor sheet: 128x32, 4 frames left-to-right: down, right, up, left
-const SURV_FRAMES = { down: 0, right: 1, up: 2, left: 3 };
+// Survivor sheet: 8 frames horizontal, 32px each (256x32)
+// Order: down, down-right, right, up-right, up, up-left, left, down-left
+const SURV_FRAMES = {
+  down: 0, 'down-right': 1, right: 2, 'up-right': 3,
+  up: 4, 'up-left': 5, left: 6, 'down-left': 7,
+};
 const SURV_SIZE = 32;
 
-// Killer sheet: 96x96, 2x2 grid, 48x48 per frame
-// [ right(col0,row0) ] [ up(col1,row0)   ]
-// [ left(col0,row1)  ] [ down(col1,row1) ]
+// Killer sheet: 8 frames horizontal, 48px each (384x48)
+// Order: down, down-right, right, up-right, up, up-left, left, down-left
 const KILL_FRAMES = {
-  right: [0, 0], up: [1, 0], left: [0, 1], down: [1, 1],
+  down: 0, 'down-right': 1, right: 2, 'up-right': 3,
+  up: 4, 'up-left': 5, left: 6, 'down-left': 7,
 };
 const KILL_SIZE = 48;
 
 function facingDir(aim) {
   const a = ((aim % (Math.PI * 2)) + Math.PI * 2) % (Math.PI * 2);
-  if (a < Math.PI / 4 || a >= 7 * Math.PI / 4) return 'right';
-  if (a < 3 * Math.PI / 4) return 'down';
-  if (a < 5 * Math.PI / 4) return 'left';
-  return 'up';
+  const eighth = Math.PI / 4;
+  if (a < eighth / 2 || a >= 2 * Math.PI - eighth / 2) return 'right';
+  if (a < eighth + eighth / 2) return 'down-right';
+  if (a < 2 * eighth + eighth / 2) return 'down';
+  if (a < 3 * eighth + eighth / 2) return 'down-left';
+  if (a < 4 * eighth + eighth / 2) return 'left';
+  if (a < 5 * eighth + eighth / 2) return 'up-left';
+  if (a < 6 * eighth + eighth / 2) return 'up';
+  if (a < 7 * eighth + eighth / 2) return 'up-right';
+  return 'right';
 }
 
 export class Renderer {
@@ -39,6 +49,7 @@ export class Renderer {
 
     this.imgs = {
       floor: this.loadImg('sprites/floor.png'),
+      wall: this.loadImg('sprites/wall.png'),
       killer: this.loadImg('sprites/killer.png'),
       survivor: this.loadImg('sprites/survivor.png'),
     };
@@ -94,7 +105,13 @@ export class Renderer {
     for (let ty = y0; ty < y1; ty++) {
       const row = game.map.tiles[ty];
       for (let tx = x0; tx < x1; tx++) {
-        if (row[tx] === '#') ctx.fillRect(sx(tx * TILE), sy(ty * TILE), TILE, TILE);
+        if (row[tx] === '#') {
+          if (this.ready(this.imgs.wall)) {
+            ctx.drawImage(this.imgs.wall, Math.round(sx(tx * TILE)), Math.round(sy(ty * TILE)), TILE, TILE);
+          } else {
+            ctx.fillRect(sx(tx * TILE), sy(ty * TILE), TILE, TILE);
+          }
+        }
       }
     }
 
@@ -171,8 +188,8 @@ export class Renderer {
           ctx.closePath(); ctx.fill();
         }
         if (this.ready(this.imgs.killer)) {
-          const [col, row] = KILL_FRAMES[dir];
-          this.drawSprite(this.imgs.killer, col * KILL_SIZE, row * KILL_SIZE, KILL_SIZE, KILL_SIZE, px, py, null, 0);
+          const frameX = KILL_FRAMES[dir] * KILL_SIZE;
+          this.drawSprite(this.imgs.killer, frameX, 0, KILL_SIZE, KILL_SIZE, px, py, null, 0);
         } else {
           ctx.fillStyle = COLORS.killer;
           ctx.beginPath(); ctx.arc(px, py, game.config.killerRadius, 0, Math.PI * 2); ctx.fill();
@@ -192,17 +209,9 @@ export class Renderer {
       if (this.ready(this.imgs.survivor)) {
         const frameX = SURV_FRAMES[dir] * SURV_SIZE;
         this.drawSprite(this.imgs.survivor, frameX, 0, SURV_SIZE, SURV_SIZE, px, py, tint, tintAlpha);
-        if (p.self) {
-          ctx.strokeStyle = COLORS.self; ctx.lineWidth = 2;
-          ctx.beginPath(); ctx.arc(px, py, SURV_SIZE / 2 + 3, 0, Math.PI * 2); ctx.stroke();
-        }
       } else {
         ctx.fillStyle = p.self ? COLORS.self : (tint || '#4ea3ff');
         ctx.beginPath(); ctx.arc(px, py, game.config.survivorRadius, 0, Math.PI * 2); ctx.fill();
-        if (p.self) {
-          ctx.strokeStyle = COLORS.self; ctx.lineWidth = 2;
-          ctx.beginPath(); ctx.arc(px, py, game.config.survivorRadius + 3, 0, Math.PI * 2); ctx.stroke();
-        }
       }
     }
   }
@@ -212,6 +221,8 @@ export class Renderer {
   // sprite PNG to have a transparent background (standard Piskel export).
   drawSprite(img, sx, sy, sw, sh, cx, cy, tintColor, tintAlpha) {
     const sc = this.scratchCtx;
+    const dx = Math.round(cx - sw / 2);
+    const dy = Math.round(cy - sh / 2);
     sc.clearRect(0, 0, sw, sh);
     sc.globalCompositeOperation = 'source-over';
     sc.globalAlpha = 1;
@@ -224,7 +235,7 @@ export class Renderer {
       sc.globalAlpha = 1;
       sc.globalCompositeOperation = 'source-over';
     }
-    this.ctx.drawImage(this.scratch, 0, 0, sw, sh, cx - sw / 2, cy - sh / 2, sw, sh);
+    this.ctx.drawImage(this.scratch, 0, 0, sw, sh, dx, dy, sw, sh);
   }
 
   drawFog(mode, aim) {
