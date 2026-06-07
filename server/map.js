@@ -32,16 +32,16 @@ function open(g, x, y) { g[y][x] = '.'; }
 function buildGrid() {
   const g = blankGrid();
 
-  // Rooms of varied sizes scattered without mirror symmetry. Each gets one or
-  // two door gaps punched after the outline is drawn.
-  roomOutline(g, 3, 3, 9, 6);    open(g, 11, 5); open(g, 6, 8);
-  roomOutline(g, 16, 2, 7, 8);   open(g, 16, 5); open(g, 19, 9);
-  roomOutline(g, 30, 3, 11, 5);  open(g, 30, 5); open(g, 36, 7);
-  roomOutline(g, 4, 13, 8, 9);   open(g, 11, 17); open(g, 7, 21);
-  roomOutline(g, 33, 11, 8, 7);  open(g, 33, 14); open(g, 37, 17);
-  roomOutline(g, 25, 14, 7, 6);  open(g, 28, 14); open(g, 25, 17);
-  roomOutline(g, 15, 20, 10, 7); open(g, 19, 20); open(g, 24, 23);
-  roomOutline(g, 30, 21, 11, 6); open(g, 35, 21); open(g, 30, 24);
+  // Rooms of varied sizes scattered without mirror symmetry. Each gets two-tile
+  // doors so the killer (radius 15, box 30px) fits through comfortably.
+  roomOutline(g, 3, 3, 9, 6);    open(g, 11, 5); open(g, 11, 6); open(g, 6, 8); open(g, 7, 8);
+  roomOutline(g, 16, 2, 7, 8);   open(g, 16, 5); open(g, 16, 6); open(g, 19, 9); open(g, 20, 9);
+  roomOutline(g, 30, 3, 11, 5);  open(g, 30, 5); open(g, 30, 6); open(g, 36, 7); open(g, 37, 7);
+  roomOutline(g, 4, 13, 8, 9);   open(g, 11, 17); open(g, 11, 18); open(g, 7, 21); open(g, 8, 21);
+  roomOutline(g, 33, 11, 8, 7);  open(g, 33, 14); open(g, 33, 15); open(g, 37, 17); open(g, 38, 17);
+  roomOutline(g, 25, 14, 7, 6);  open(g, 28, 14); open(g, 29, 14); open(g, 25, 17); open(g, 25, 18);
+  roomOutline(g, 15, 20, 10, 7); open(g, 19, 20); open(g, 20, 20); open(g, 24, 23); open(g, 24, 24);
+  roomOutline(g, 30, 21, 11, 6); open(g, 35, 21); open(g, 36, 21); open(g, 30, 24); open(g, 30, 25);
 
   // L-shaped cover and loose segments to break long sightlines.
   hWall(g, 14, 12, 6); vWall(g, 14, 12, 4);
