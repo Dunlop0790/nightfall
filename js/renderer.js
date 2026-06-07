@@ -243,7 +243,6 @@ export class Renderer {
         if (this.keyed.killer) {
           const [col, row] = killerFrame(dir);
           this.drawSprite(this.keyed.killer, col * KILL_SIZE, row * KILL_SIZE, KILL_SIZE, KILL_SIZE, px, py, null, 0);
-          if (p.self) this.selfRing(px, py, KILL_SIZE / 2 + 3);
         } else {
           ctx.fillStyle = COLORS.killer;
           ctx.beginPath(); ctx.arc(px, py, game.config.killerRadius, 0, Math.PI * 2); ctx.fill();
