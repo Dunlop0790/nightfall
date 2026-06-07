@@ -302,9 +302,14 @@ export class Room {
     let dx = (p.input.right ? 1 : 0) - (p.input.left ? 1 : 0);
     let dy = (p.input.down ? 1 : 0) - (p.input.up ? 1 : 0);
     if (dx === 0 && dy === 0) return;
-    const len = Math.hypot(dx, dy);
-    dx /= len; dy /= len;
-    if (p.role === 'survivor') p.lastAim = Math.atan2(dy, dx);
+
+    // Snap to the nearest of 8 directions so diagonal movement feels
+    // intentional and consistent rather than analog.
+    const angle = Math.round(Math.atan2(dy, dx) / (Math.PI / 4)) * (Math.PI / 4);
+    dx = Math.cos(angle);
+    dy = Math.sin(angle);
+
+    if (p.role === 'survivor') p.lastAim = angle;
     const nx = p.x + dx * speed * DT;
     if (fits(grid, nx, p.y, radius)) p.x = nx;
     const ny = p.y + dy * speed * DT;
