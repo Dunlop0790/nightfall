@@ -15,7 +15,7 @@ export const SURVIVOR_SPEED = 145;     // px / second
 
 // Combat. The killer does no passive damage; it must swing or lunge.
 export const SURVIVOR_HP = 3;          // hits to down a survivor
-export const ATTACK_RANGE = 38;        // reach measured from the killer's centre
+export const ATTACK_RANGE = 52;        // reach measured from the killer's centre
 export const ATTACK_ARC = 0.7;         // radians, half-width of the swing cone
 export const ATTACK_COOLDOWN = 0.65;   // seconds between swings
 export const HIT_INVULN = 0.9;         // seconds a survivor cannot be hit after a hit

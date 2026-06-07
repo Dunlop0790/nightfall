@@ -6,7 +6,7 @@ import {
   SURVIVOR_HP, ATTACK_RANGE, ATTACK_ARC, ATTACK_COOLDOWN, HIT_INVULN, KNOCKBACK,
   LUNGE_SPEED, LUNGE_DURATION, LUNGE_COOLDOWN,
   SPRINT_MULTIPLIER, SPRINT_DURATION, SPRINT_COOLDOWN,
-  OBJECTIVE_RADIUS, OBJECTIVE_TIME, OBJECTIVE_MAX_RATE, OBJECTIVES_TO_WIN,
+  OBJECTIVE_RADIUS, OBJECTIVE_TIME, OBJECTIVE_MAX_RATE,
   MIN_PLAYERS_TO_START,
 } from './constants.js';
 import { buildMap, pickSpawns, sampleObjectives } from './map.js';
@@ -164,7 +164,9 @@ export class Room {
       }
     }
 
-    const spots = sampleObjectives(this.map, OBJECTIVES_TO_WIN);
+    // One generator per player in the match. Survivors must finish all of them.
+    const genCount = this.players.size;
+    const spots = sampleObjectives(this.map, genCount);
     this.objectives = spots.map(s => ({ x: s.x, y: s.y, progress: 0, done: false }));
     this.phase = PHASE.PLAYING;
 
@@ -178,12 +180,13 @@ export class Room {
       lungeDuration: LUNGE_DURATION,
       lungeCooldown: LUNGE_COOLDOWN,
       attackCooldown: ATTACK_COOLDOWN,
+      attackRange: ATTACK_RANGE,
       sprintMultiplier: SPRINT_MULTIPLIER,
       sprintDuration: SPRINT_DURATION,
       sprintCooldown: SPRINT_COOLDOWN,
       objectiveRadius: OBJECTIVE_RADIUS,
       objectiveTime: OBJECTIVE_TIME,
-      objectivesToWin: OBJECTIVES_TO_WIN,
+      objectivesToWin: this.objectives.length,
     };
     const roster = ids.map(pid => {
       const pl = this.players.get(pid);
@@ -376,7 +379,7 @@ export class Room {
 
     if (!killerPresent) { this.endRound('survivors'); return; }
     if (survivors.length === 0) { this.endRound('killer'); return; }
-    if (doneCount >= OBJECTIVES_TO_WIN) { this.endRound('survivors'); return; }
+    if (doneCount >= this.objectives.length) { this.endRound('survivors'); return; }
     if (aliveSurvivors.length === 0) { this.endRound('killer'); return; }
   }
 
