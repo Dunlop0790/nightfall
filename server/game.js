@@ -181,6 +181,7 @@ export class Room {
       sprintMultiplier: SPRINT_MULTIPLIER,
       sprintDuration: SPRINT_DURATION,
       sprintCooldown: SPRINT_COOLDOWN,
+      objectiveRadius: OBJECTIVE_RADIUS,
       objectiveTime: OBJECTIVE_TIME,
       objectivesToWin: OBJECTIVES_TO_WIN,
     };
