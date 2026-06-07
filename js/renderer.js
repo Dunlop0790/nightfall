@@ -6,20 +6,27 @@ import {
 const SWING_RADIUS = 46;
 const SWING_ARC = 0.7;
 
-// Survivor sheet: 8 frames horizontal, 32px each (256x32)
-// Order: down, down-right, right, up-right, up, up-left, left, down-left
-const SURV_FRAMES = {
-  down: 0, 'down-right': 1, right: 2, 'up-right': 3,
-  up: 4, 'up-left': 5, left: 6, 'down-left': 7,
-};
+// Survivor sheet: 128x32, 4 frames left-to-right: down, right, up, left
+// Diagonal movement directions use horizontal priority (down-right -> right, etc.)
+const SURV_FRAME_X = { down: 0, right: 32, up: 64, left: 96 };
+function survivorFrame(dir) {
+  if (dir === 'down') return SURV_FRAME_X.down;
+  if (dir === 'up') return SURV_FRAME_X.up;
+  if (dir === 'right' || dir === 'down-right' || dir === 'up-right') return SURV_FRAME_X.right;
+  return SURV_FRAME_X.left; // left, down-left, up-left
+}
 const SURV_SIZE = 32;
 
-// Killer sheet: 8 frames horizontal, 48px each (384x48)
-// Order: down, down-right, right, up-right, up, up-left, left, down-left
-const KILL_FRAMES = {
-  down: 0, 'down-right': 1, right: 2, 'up-right': 3,
-  up: 4, 'up-left': 5, left: 6, 'down-left': 7,
-};
+// Killer sheet: 96x96, 2x2 grid, 48x48 per frame
+// [ right(col0,row0) ] [ up(col1,row0)   ]
+// [ left(col0,row1)  ] [ down(col1,row1) ]
+const KILL_GRID = { right: [0,0], up: [1,0], left: [0,1], down: [1,1] };
+function killerFrame(dir) {
+  if (dir === 'down' || dir === 'down-left' || dir === 'down-right') return KILL_GRID.down;
+  if (dir === 'up' || dir === 'up-left' || dir === 'up-right') return KILL_GRID.up;
+  if (dir === 'right') return KILL_GRID.right;
+  return KILL_GRID.left;
+}
 const KILL_SIZE = 48;
 
 function facingDir(aim) {
@@ -188,8 +195,8 @@ export class Renderer {
           ctx.closePath(); ctx.fill();
         }
         if (this.ready(this.imgs.killer)) {
-          const frameX = KILL_FRAMES[dir] * KILL_SIZE;
-          this.drawSprite(this.imgs.killer, frameX, 0, KILL_SIZE, KILL_SIZE, px, py, null, 0);
+          const [col, row] = killerFrame(dir);
+          this.drawSprite(this.imgs.killer, col * KILL_SIZE, row * KILL_SIZE, KILL_SIZE, KILL_SIZE, px, py, null, 0);
         } else {
           ctx.fillStyle = COLORS.killer;
           ctx.beginPath(); ctx.arc(px, py, game.config.killerRadius, 0, Math.PI * 2); ctx.fill();
@@ -207,7 +214,7 @@ export class Renderer {
       const tintAlpha = (1 - frac) * 0.5;
 
       if (this.ready(this.imgs.survivor)) {
-        const frameX = SURV_FRAMES[dir] * SURV_SIZE;
+        const frameX = survivorFrame(dir);
         this.drawSprite(this.imgs.survivor, frameX, 0, SURV_SIZE, SURV_SIZE, px, py, tint, tintAlpha);
       } else {
         ctx.fillStyle = p.self ? COLORS.self : (tint || '#4ea3ff');
