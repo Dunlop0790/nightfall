@@ -108,13 +108,20 @@ function pips(hp, max) {
   return s;
 }
 
+function sprintLabel(info) {
+  if (info.state === 'active') return `<span class="sprint active">SPRINT ${info.remaining.toFixed(1)}s</span>`;
+  if (info.state === 'cooldown') return `<span class="sprint cooldown">SPRINT cd ${info.remaining.toFixed(1)}s</span>`;
+  return `<span class="sprint ready">SPRINT ready</span>`;
+}
+
 function updateHud() {
   if (!game.config) return;
   const objs = `${game.doneCount()} / ${game.config.objectivesToWin} objectives`;
   const alive = `${game.aliveSurvivors()} alive`;
+  const sprint = sprintLabel(game.sprintInfo());
 
   if (game.role === 'killer') {
-    setHud(`<span class="role killer">KILLER</span><span>${objs}</span><span>${alive}</span><span class="hint">WASD move &middot; mouse aim &middot; SPACE / click attack &middot; SHIFT lunge</span>`);
+    setHud(`<span class="role killer">KILLER</span><span>${objs}</span><span>${alive}</span>${sprint}<span class="hint">WASD &middot; mouse aim &middot; SPACE attack &middot; SHIFT sprint/lunge</span>`);
     return;
   }
   if (!game.localAlive) {
@@ -123,7 +130,7 @@ function updateHud() {
     return;
   }
   const hp = `<span class="pips">${pips(game.localHp, game.config.survivorHp)}</span>`;
-  setHud(`<span class="role survivor">SURVIVOR</span>${hp}<span>${objs}</span><span>${alive}</span><span class="hint">WASD move &middot; mouse aim &middot; hold SPACE on a generator</span>`);
+  setHud(`<span class="role survivor">SURVIVOR</span>${hp}<span>${objs}</span><span>${alive}</span>${sprint}<span class="hint">WASD &middot; mouse aim &middot; SHIFT sprint &middot; hold SPACE on generator</span>`);
 }
 
 // ---- spectator switching ----

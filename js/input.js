@@ -15,7 +15,7 @@ const MOVE = {
 
 export class Input {
   constructor(canvas) {
-    this.state = { up: false, down: false, left: false, right: false, action: false, attack: false, lunge: false };
+    this.state = { up: false, down: false, left: false, right: false, action: false, attack: false, lunge: false, sprint: false };
     this.aim = 0;
 
     window.addEventListener('keydown', (e) => this.setKey(e, true));
@@ -39,7 +39,7 @@ export class Input {
       if (e.code === 'Space') this.state.attack = down;
       e.preventDefault();
     }
-    if (e.code === 'ShiftLeft' || e.code === 'ShiftRight') { this.state.lunge = down; e.preventDefault(); }
+    if (e.code === 'ShiftLeft' || e.code === 'ShiftRight') { this.state.lunge = down; this.state.sprint = down; e.preventDefault(); }
   }
 
   snapshot() { return { ...this.state, aim: Math.round(this.aim * 100) / 100 }; }
