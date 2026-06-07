@@ -3,7 +3,6 @@ import {
   COLORS, hpColor,
 } from './constants.js';
 
-const SWING_RADIUS = 46;
 const SWING_ARC = 0.7;
 
 // Survivor sheet: 128x32, 4 frames left-to-right: down, right, up, left
@@ -235,9 +234,10 @@ export class Renderer {
 
       if (isKiller) {
         if (p.swing) {
+          const reach = game.config.attackRange + game.config.survivorRadius;
           ctx.fillStyle = 'rgba(255,150,140,0.35)';
           ctx.beginPath(); ctx.moveTo(px, py);
-          ctx.arc(px, py, SWING_RADIUS, facing - SWING_ARC, facing + SWING_ARC);
+          ctx.arc(px, py, reach, facing - SWING_ARC, facing + SWING_ARC);
           ctx.closePath(); ctx.fill();
         }
         if (this.keyed.killer) {
