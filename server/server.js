@@ -39,6 +39,7 @@ wss.on('connection', (ws) => {
       case 'join':  room.addPlayer(id, String(msg.name || 'Player').slice(0, 16), ws); break;
       case 'start': room.start(id); break;
       case 'input': room.setInput(id, msg); break;
+      case 'claimKiller': room.claimKiller(id); break;
     }
   });
 

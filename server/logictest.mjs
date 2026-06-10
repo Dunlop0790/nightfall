@@ -138,5 +138,45 @@ room5.start(40);
 room5.removePlayer(40);
 check('killer leaving -> survivors win', last(s6, 'over') && last(s6, 'over').winner === 'survivors');
 
+// --- killer election ---
+const room6 = new Room();
+const h6 = stub(), c6 = stub(), x6 = stub();
+room6.addPlayer(50, 'Host', h6);
+room6.addPlayer(51, 'Claimer', c6);
+room6.addPlayer(52, 'Third', x6);
+room6.claimKiller(51);
+check('lobby broadcasts killer elect', last(h6, 'lobby').killer === 51);
+room6.start(50);
+check('claimer becomes killer', last(c6, 'init').role === 'killer');
+check('host becomes survivor when claim exists', last(h6, 'init').role === 'survivor');
+
+const room7 = new Room();
+const h7 = stub(), c7 = stub();
+room7.addPlayer(60, 'H', h7);
+room7.addPlayer(61, 'C', c7);
+room7.claimKiller(61); room7.claimKiller(61);   // toggle off
+check('unclaim clears elect', last(h7, 'lobby').killer === null);
+room7.start(60);
+check('host is killer by default', last(h7, 'init').role === 'killer');
+
+const room8 = new Room();
+const h8 = stub(), c8 = stub(), x8 = stub();
+room8.addPlayer(70, 'H', h8);
+room8.addPlayer(71, 'C', c8);
+room8.addPlayer(72, 'X', x8);
+room8.claimKiller(71);
+room8.removePlayer(71);
+room8.start(70);
+check('elect disconnect falls back to host', last(h8, 'init').role === 'killer');
+
+// --- crates ---
+const room9 = new Room();
+const i9 = stub(), j9 = stub();
+room9.addPlayer(80, 'A', i9);
+room9.addPlayer(81, 'B', j9);
+room9.start(80);
+const init9 = last(i9, 'init');
+check('init carries crates', Array.isArray(init9.crates) && init9.crates.length > 0);
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

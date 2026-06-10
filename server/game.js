@@ -9,7 +9,7 @@ import {
   OBJECTIVE_RADIUS, OBJECTIVE_TIME, OBJECTIVE_MAX_RATE,
   MIN_PLAYERS_TO_START,
 } from './constants.js';
-import { buildMap, pickSpawns, sampleObjectives } from './map.js';
+import { buildMap, pickSpawns, sampleObjectives, sampleCrates } from './map.js';
 
 const PHASE = { LOBBY: 'lobby', PLAYING: 'playing', OVER: 'over' };
 
@@ -45,8 +45,10 @@ export class Room {
     this.phase = PHASE.LOBBY;
     this.map = null;
     this.objectives = [];
+    this.crates = [];
     this.winner = null;
     this.elapsed = 0;
+    this.killerElect = null;   // player id who claimed the killer role, or null
   }
 
   // ---- connection lifecycle ----
@@ -85,6 +87,7 @@ export class Room {
     const wasHost = p.host;
     const wasPlaying = this.phase === PHASE.PLAYING && p.role !== null;
     this.players.delete(id);
+    if (this.killerElect === id) this.killerElect = null;
     if (wasHost) {
       const next = this.players.values().next().value;
       if (next) next.host = true;
@@ -92,6 +95,14 @@ export class Room {
     if (wasPlaying) this.checkWin();
     if (this.phase === PHASE.PLAYING) this.broadcastState();
     else this.broadcastLobby();
+  }
+
+  // A player claims (or unclaims) the killer role for the next round.
+  claimKiller(id) {
+    if (!this.players.has(id)) return;
+    if (this.phase === PHASE.PLAYING) return;
+    this.killerElect = this.killerElect === id ? null : id;
+    this.broadcastLobby();
   }
 
   // ---- input ----
@@ -121,6 +132,10 @@ export class Room {
     const spawns = pickSpawns(this.map);
     const ids = [...this.players.keys()];
 
+    // The killer is whoever claimed the role in the lobby; default is the host.
+    const killerId = (this.killerElect !== null && this.players.has(this.killerElect))
+      ? this.killerElect : id;
+
     // Survivors cluster around one anchor; killer takes the far anchor.
     const ring = [
       [0, 0], [34, 0], [-34, 0], [0, 34], [0, -34],
@@ -144,7 +159,7 @@ export class Room {
       pl.sprintUntil = 0;
       pl.sprintCooldownUntil = 0;
 
-      if (pid === id) {
+      if (pid === killerId) {
         pl.role = 'killer';
         pl.x = spawns.killerAnchor.x;
         pl.y = spawns.killerAnchor.y;
@@ -168,6 +183,7 @@ export class Room {
     const genCount = this.players.size;
     const spots = sampleObjectives(this.map, genCount);
     this.objectives = spots.map(s => ({ x: s.x, y: s.y, progress: 0, done: false }));
+    this.crates = sampleCrates(this.map, 24);
     this.phase = PHASE.PLAYING;
 
     const config = {
@@ -198,6 +214,7 @@ export class Room {
         t: 'init', you: pid, role: pl.role, config,
         map: { cols: this.map.cols, rows: this.map.rows, tiles: this.map.tiles },
         objectives: this.objectives.map(o => ({ x: o.x, y: o.y })),
+        crates: this.crates,
         players: roster,
       });
     }
@@ -387,6 +404,7 @@ export class Room {
     this.phase = PHASE.OVER;
     this.winner = winner;
     this.broadcast({ t: 'over', winner });
+    this.broadcastLobby();   // refresh rosters so players can re-pick the killer
   }
 
   // ---- networking ----
@@ -427,7 +445,7 @@ export class Room {
 
   broadcastLobby() {
     const list = [...this.players.values()].map(p => ({ id: p.id, name: p.name, host: p.host }));
-    this.broadcast({ t: 'lobby', players: list, canStart: list.length >= MIN_PLAYERS_TO_START });
+    this.broadcast({ t: 'lobby', players: list, canStart: list.length >= MIN_PLAYERS_TO_START, killer: this.killerElect });
   }
 
   broadcast(obj) {

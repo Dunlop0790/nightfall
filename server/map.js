@@ -150,3 +150,27 @@ export function sampleObjectives(map, n) {
   for (const t of pool) { if (chosen.length >= n) break; if (!chosen.includes(t)) chosen.push(t); }
   return chosen.map(t => center(t.x, t.y));
 }
+
+// Crates: non-solid hide props placed on floor tiles that touch at least one
+// wall. Wall-adjacent tiles are exactly the ones excluded from generator
+// candidates, so crates and generators never collide.
+export function sampleCrates(map, n) {
+  const g = map.grid;
+  const pool = [];
+  for (let y = 2; y < map.rows - 2; y++) {
+    for (let x = 2; x < map.cols - 2; x++) {
+      if (g[y][x] !== '.') continue;
+      const wallNeighbor =
+        g[y - 1][x] === '#' || g[y + 1][x] === '#' ||
+        g[y][x - 1] === '#' || g[y][x + 1] === '#';
+      if (wallNeighbor) pool.push({ x, y });
+    }
+  }
+  for (let i = pool.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [pool[i], pool[j]] = [pool[j], pool[i]]; }
+  const chosen = [];
+  for (const t of pool) {
+    if (chosen.length >= n) break;
+    if (chosen.every(c => chebyshev(c, t) >= 3)) chosen.push(t);
+  }
+  return chosen.map(t => center(t.x, t.y));
+}
