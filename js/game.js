@@ -14,6 +14,7 @@ export class Game {
     this.roles = new Map();
     this.names = new Map();
     this.objectives = [];
+    this.crates = [];
     this.prev = null;
     this.curr = null;
     this.local = null;
@@ -34,6 +35,7 @@ export class Game {
     this.roles = new Map(msg.players.map(p => [p.id, p.role]));
     this.names = new Map(msg.players.map(p => [p.id, p.name]));
     this.objectives = msg.objectives.map(o => ({ x: o.x, y: o.y, progress: 0, done: false }));
+    this.crates = msg.crates || [];
     this.prev = null;
     this.curr = null;
     this.local = null;

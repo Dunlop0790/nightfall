@@ -58,60 +58,15 @@ export class Renderer {
       wall: this.loadImg('sprites/wall.png'),
       killer: this.loadImg('sprites/killer.png'),
       survivor: this.loadImg('sprites/survivor.png'),
+      crate: this.loadImg('sprites/crate.png'),
     };
-    // Background-removed versions of the character sheets (floor/wall stay solid).
-    this.keyed = { killer: null, survivor: null };
-    const keyWhenReady = (name) => {
-      const img = this.imgs[name];
-      const run = () => { this.keyed[name] = this.removeBackground(img); };
-      if (img.complete && img.naturalWidth > 0) run();
-      else img.addEventListener('load', run);
-    };
-    keyWhenReady('killer');
-    keyWhenReady('survivor');
 
     this.resize();
     window.addEventListener('resize', () => this.resize());
   }
 
   loadImg(src) { const i = new Image(); i.src = src; return i; }
-  ready(img) { return img && (img.complete ? img.naturalWidth > 0 : img.width > 0); }
-
-  // Make the sprite background transparent. Flood-fills from the edges keying
-  // out pixels close to the corner colour, so interior dark pixels (eyes,
-  // outlines) are kept. If the sheet already has alpha, it is left untouched.
-  removeBackground(img) {
-    const W = img.naturalWidth, H = img.naturalHeight;
-    const c = document.createElement('canvas');
-    c.width = W; c.height = H;
-    const cx = c.getContext('2d');
-    cx.drawImage(img, 0, 0);
-    const data = cx.getImageData(0, 0, W, H);
-    const px = data.data;
-    if (px[3] === 0) return c; // already transparent
-
-    const br = px[0], bg = px[1], bb = px[2];
-    const tol = 42;
-    const isBg = (i) => Math.abs(px[i] - br) < tol && Math.abs(px[i + 1] - bg) < tol && Math.abs(px[i + 2] - bb) < tol;
-
-    const visited = new Uint8Array(W * H);
-    const stack = [];
-    for (let x = 0; x < W; x++) { stack.push(x, 0, x, H - 1); }
-    for (let y = 0; y < H; y++) { stack.push(0, y, W - 1, y); }
-    while (stack.length) {
-      const y = stack.pop(), x = stack.pop();
-      if (x < 0 || y < 0 || x >= W || y >= H) continue;
-      const idx = y * W + x;
-      if (visited[idx]) continue;
-      visited[idx] = 1;
-      const i = idx * 4;
-      if (!isBg(i)) continue;
-      px[i + 3] = 0;
-      stack.push(x + 1, y, x - 1, y, x, y + 1, x, y - 1);
-    }
-    cx.putImageData(data, 0, 0);
-    return c;
-  }
+  ready(img) { return img.complete && img.naturalWidth > 0; }
 
   resize() {
     this.w = this.canvas.width = window.innerWidth;
@@ -169,8 +124,29 @@ export class Renderer {
 
     this.drawObjectives(game, sx, sy);
     this.drawPlayers(game, input, now, sx, sy);
+    this.drawCrates(game, sx, sy);
     this.drawFog(game.fogMode(), input.aim);
     ctx.drawImage(this.fog, 0, 0);
+  }
+
+  // Crates are non-solid props drawn over players, so anyone standing on a
+  // crate tile is visually hidden behind it.
+  drawCrates(game, sx, sy) {
+    const ctx = this.ctx;
+    const S = 32;
+    for (const c of game.crates) {
+      const cx = Math.round(sx(c.x) - S / 2);
+      const cy = Math.round(sy(c.y) - S / 2);
+      if (this.ready(this.imgs.crate)) {
+        ctx.drawImage(this.imgs.crate, cx, cy, S, S);
+      } else {
+        ctx.fillStyle = '#7a5a30';
+        ctx.fillRect(cx, cy, S, S);
+        ctx.strokeStyle = '#4c3a20';
+        ctx.lineWidth = 2;
+        ctx.strokeRect(cx + 1, cy + 1, S - 2, S - 2);
+      }
+    }
   }
 
   drawObjectives(game, sx, sy) {
@@ -240,9 +216,9 @@ export class Renderer {
           ctx.arc(px, py, reach, facing - SWING_ARC, facing + SWING_ARC);
           ctx.closePath(); ctx.fill();
         }
-        if (this.keyed.killer) {
+        if (this.ready(this.imgs.killer)) {
           const [col, row] = killerFrame(dir);
-          this.drawSprite(this.keyed.killer, col * KILL_SIZE, row * KILL_SIZE, KILL_SIZE, KILL_SIZE, px, py, null, 0);
+          this.drawSprite(this.imgs.killer, col * KILL_SIZE, row * KILL_SIZE, KILL_SIZE, KILL_SIZE, px, py, null, 0);
         } else {
           ctx.fillStyle = COLORS.killer;
           ctx.beginPath(); ctx.arc(px, py, game.config.killerRadius, 0, Math.PI * 2); ctx.fill();
@@ -259,9 +235,9 @@ export class Renderer {
       const tint = frac >= 0.999 ? null : hpColor(frac);
       const tintAlpha = (1 - frac) * 0.5;
 
-      if (this.keyed.survivor) {
+      if (this.ready(this.imgs.survivor)) {
         const frameX = survivorFrame(dir);
-        this.drawSprite(this.keyed.survivor, frameX, 0, SURV_SIZE, SURV_SIZE, px, py, tint, tintAlpha);
+        this.drawSprite(this.imgs.survivor, frameX, 0, SURV_SIZE, SURV_SIZE, px, py, tint, tintAlpha);
         if (p.self) this.selfRing(px, py, SURV_SIZE / 2 + 3);
       } else {
         ctx.fillStyle = p.self ? COLORS.self : (tint || '#4ea3ff');

@@ -35,14 +35,20 @@ function setHud(html) { $('hud').innerHTML = html; }
 function wireBanner() {
   const b = $('banner').querySelector('[data-start]');
   if (b) b.onclick = () => { net.send({ t: 'start' }); hideBanner(); };
+  const l = $('banner').querySelector('[data-lobby]');
+  if (l) l.onclick = () => { inMatch = false; hideBanner(); showLobby(); };
 }
 
-function renderLobbyList(players, canStart) {
+function renderLobbyList(players, canStart, killerId) {
   const me = players.find(p => p.id === myId);
   isHost = !!(me && me.host);
   $('playerList').innerHTML = players.map(p =>
-    `<li>${escapeHtml(p.name)}${p.host ? ' <span class="tag">host</span>' : ''}${p.id === myId ? ' <span class="tag you">you</span>' : ''}</li>`
+    `<li>${escapeHtml(p.name)}${p.host ? ' <span class="tag">host</span>' : ''}${p.id === killerId ? ' <span class="tag killer">killer</span>' : ''}${p.id === myId ? ' <span class="tag you">you</span>' : ''}</li>`
   ).join('');
+
+  const killerBtn = $('killerBtn');
+  killerBtn.textContent = killerId === myId ? 'Pass the killer role' : 'Be the killer';
+
   const startBtn = $('startBtn');
   if (isHost) {
     startBtn.style.display = 'inline-block';
@@ -70,7 +76,7 @@ function onMessage(msg) {
       if (!inMatch) showLobby();
       $('joinRow').style.display = 'none';
       $('rosterBox').style.display = 'block';
-      renderLobbyList(msg.players, msg.canStart);
+      renderLobbyList(msg.players, msg.canStart, msg.killer);
       break;
     case 'wait':
       hideLobby();
@@ -92,8 +98,8 @@ function onMessage(msg) {
       const youWon =
         (msg.winner === 'killer' && game.role === 'killer') ||
         (msg.winner === 'survivors' && game.role === 'survivor');
-      const btn = isHost ? '<button data-start>Play again</button>' : '<p>Waiting for the host to restart.</p>';
-      showBanner(`<h1>${title}</h1><p>${youWon ? 'You won.' : 'You lost.'}</p>${btn}`);
+      const startBtn = isHost ? '<button data-start>Play again</button>' : '';
+      showBanner(`<h1>${title}</h1><p>${youWon ? 'You won.' : 'You lost.'}</p><div class="bannerRow">${startBtn}<button data-lobby class="ghost">Back to lobby</button></div>`);
       break;
     }
     case 'full':
@@ -167,6 +173,7 @@ function frame(now) {
 $('joinBtn').onclick = () => net.send({ t: 'join', name: $('nameInput').value.trim() || 'Player' });
 $('nameInput').addEventListener('keydown', (e) => { if (e.key === 'Enter') $('joinBtn').click(); });
 $('startBtn').onclick = () => net.send({ t: 'start' });
+$('killerBtn').onclick = () => net.send({ t: 'claimKiller' });
 
 net = new Net(SERVER_URL, onMessage);
 net.onClose(() => showBanner('<h1>Disconnected</h1><p>Refresh to reconnect.</p>'));
