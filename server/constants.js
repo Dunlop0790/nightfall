@@ -38,3 +38,19 @@ export const MAX_PLAYERS = 8;
 export const SPRINT_MULTIPLIER = 1.55;  // speed factor while sprinting
 export const SPRINT_DURATION = 2.2;     // seconds the burst lasts
 export const SPRINT_COOLDOWN = 5.0;     // seconds before sprint is ready again
+
+// Downed / revive. At 0 hp a survivor is downed, not dead. They bleed out on a
+// timer unless a teammate revives them.
+export const BLEEDOUT_TIME = 40;       // seconds from downed to dead
+export const REVIVE_TIME = 4;          // seconds a teammate must hold to revive
+export const REVIVE_RADIUS = 34;       // px to a downed ally to revive them
+export const REVIVE_HP = 1;            // hp granted on revive
+
+// Escape phase. When every generator is done an exit opens; each survivor
+// channels at it to escape. Escape takes 3x a generator by design.
+export const ESCAPE_TIME = OBJECTIVE_TIME * 3;
+export const EXIT_RADIUS = 36;         // px to the exit to channel escape
+
+// Noise pings shown to the killer.
+export const NOISE_SPRINT_INTERVAL = 0.6;  // seconds between pings while sprinting
+export const NOISE_REPAIR_INTERVAL = 1.4;  // seconds between pings while repairing

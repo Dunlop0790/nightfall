@@ -1,44 +1,36 @@
+// Draws the world, players by state, props, the exit, killer noise pings, and
+// the fog overlay. All sprites come from the manifest in assets.js; a missing
+// file renders as a labelled placeholder box so art can be dropped in anytime.
+
 import {
   KILLER_VIEW, FLASH_RANGE, FLASH_HALF_ANGLE, SELF_GLOW, SPECTATE_VIEW, FOG_ALPHA,
   COLORS, hpColor,
 } from './constants.js';
+import { SPRITES, PLACEHOLDER_COLORS } from './assets.js';
 
 const SWING_ARC = 0.7;
+const TILE = 32;
 
-// Survivor sheet: 128x32, 4 frames left-to-right: down, right, up, left
-// Diagonal movement directions use horizontal priority (down-right -> right, etc.)
-const SURV_FRAME_X = { down: 0, right: 32, up: 64, left: 96 };
-function survivorFrame(dir) {
-  if (dir === 'down') return SURV_FRAME_X.down;
-  if (dir === 'up') return SURV_FRAME_X.up;
-  if (dir === 'right' || dir === 'down-right' || dir === 'up-right') return SURV_FRAME_X.right;
-  return SURV_FRAME_X.left; // left, down-left, up-left
+// Character sheets: 4 frames left-to-right: down, right, up, left.
+const FRAME_X = { down: 0, right: 1, up: 2, left: 3 };
+function frameFor(dir) {
+  if (dir === 'down' || dir === 'down-left' || dir === 'down-right') return FRAME_X.down;
+  if (dir === 'up' || dir === 'up-left' || dir === 'up-right') return FRAME_X.up;
+  if (dir === 'right') return FRAME_X.right;
+  return FRAME_X.left;
 }
-const SURV_SIZE = 32;
-
-// Killer sheet: 96x96, 2x2 grid, 48x48 per frame
-// [ right(col0,row0) ] [ up(col1,row0)   ]
-// [ left(col0,row1)  ] [ down(col1,row1) ]
-const KILL_GRID = { right: [0,0], up: [1,0], left: [0,1], down: [1,1] };
-function killerFrame(dir) {
-  if (dir === 'down' || dir === 'down-left' || dir === 'down-right') return KILL_GRID.down;
-  if (dir === 'up' || dir === 'up-left' || dir === 'up-right') return KILL_GRID.up;
-  if (dir === 'right') return KILL_GRID.right;
-  return KILL_GRID.left;
-}
-const KILL_SIZE = 48;
 
 function facingDir(aim) {
   const a = ((aim % (Math.PI * 2)) + Math.PI * 2) % (Math.PI * 2);
-  const eighth = Math.PI / 4;
-  if (a < eighth / 2 || a >= 2 * Math.PI - eighth / 2) return 'right';
-  if (a < eighth + eighth / 2) return 'down-right';
-  if (a < 2 * eighth + eighth / 2) return 'down';
-  if (a < 3 * eighth + eighth / 2) return 'down-left';
-  if (a < 4 * eighth + eighth / 2) return 'left';
-  if (a < 5 * eighth + eighth / 2) return 'up-left';
-  if (a < 6 * eighth + eighth / 2) return 'up';
-  if (a < 7 * eighth + eighth / 2) return 'up-right';
+  const e = Math.PI / 4;
+  if (a < e / 2 || a >= 2 * Math.PI - e / 2) return 'right';
+  if (a < e + e / 2) return 'down-right';
+  if (a < 2 * e + e / 2) return 'down';
+  if (a < 3 * e + e / 2) return 'down-left';
+  if (a < 4 * e + e / 2) return 'left';
+  if (a < 5 * e + e / 2) return 'up-left';
+  if (a < 6 * e + e / 2) return 'up';
+  if (a < 7 * e + e / 2) return 'up-right';
   return 'right';
 }
 
@@ -48,25 +40,51 @@ export class Renderer {
     this.ctx = canvas.getContext('2d');
     this.fog = document.createElement('canvas');
     this.fogCtx = this.fog.getContext('2d');
-    // scratch canvas for hp-tinted sprite compositing
     this.scratch = document.createElement('canvas');
     this.scratch.width = 64; this.scratch.height = 64;
     this.scratchCtx = this.scratch.getContext('2d');
 
-    this.imgs = {
-      floor: this.loadImg('sprites/floor.png'),
-      wall: this.loadImg('sprites/wall.png'),
-      killer: this.loadImg('sprites/killer.png'),
-      survivor: this.loadImg('sprites/survivor.png'),
-      crate: this.loadImg('sprites/crate.png'),
-    };
+    // Load every slot in the manifest; build a placeholder for each in case
+    // the file is missing.
+    this.sprites = {};
+    for (const [name, def] of Object.entries(SPRITES)) {
+      const img = new Image();
+      img.src = def.src;
+      this.sprites[name] = { img, def, placeholder: this.makePlaceholder(name, def) };
+    }
 
     this.resize();
     window.addEventListener('resize', () => this.resize());
   }
 
-  loadImg(src) { const i = new Image(); i.src = src; return i; }
-  ready(img) { return img.complete && img.naturalWidth > 0; }
+  makePlaceholder(name, def) {
+    const single = def.size || def.frame;
+    const frames = def.frame ? 4 : 1;
+    const c = document.createElement('canvas');
+    c.width = single * frames;
+    c.height = single;
+    const cx = c.getContext('2d');
+    for (let f = 0; f < frames; f++) {
+      const x = f * single;
+      cx.fillStyle = PLACEHOLDER_COLORS[name] || '#666';
+      cx.fillRect(x, 0, single, single);
+      cx.strokeStyle = 'rgba(0,0,0,0.6)';
+      cx.lineWidth = 2;
+      cx.strokeRect(x + 1, 1, single - 2, single - 2);
+      cx.fillStyle = 'rgba(0,0,0,0.7)';
+      cx.font = `${Math.floor(single / 2.4)}px monospace`;
+      cx.textAlign = 'center';
+      cx.textBaseline = 'middle';
+      cx.fillText(name[0].toUpperCase(), x + single / 2, single / 2);
+    }
+    return c;
+  }
+
+  // The drawable for a slot: the real image once loaded, placeholder otherwise.
+  art(name) {
+    const s = this.sprites[name];
+    return (s.img.complete && s.img.naturalWidth > 0) ? s.img : s.placeholder;
+  }
 
   resize() {
     this.w = this.canvas.width = window.innerWidth;
@@ -76,7 +94,6 @@ export class Renderer {
 
   draw(game, input, now) {
     const ctx = this.ctx;
-    const TILE = 32;
     const focus = game.focusPos(now);
     const camX = focus.x - this.w / 2;
     const camY = focus.y - this.h / 2;
@@ -91,73 +108,36 @@ export class Renderer {
     const y0 = Math.max(0, Math.floor(camY / TILE) - 1);
     const y1 = Math.min(game.map.rows, Math.ceil((camY + this.h) / TILE) + 1);
 
-    // floor tiles
+    const floorArt = this.art('floor');
+    const wallArt = this.art('wall');
     for (let ty = y0; ty < y1; ty++) {
       const row = game.map.tiles[ty];
       for (let tx = x0; tx < x1; tx++) {
-        if (row[tx] !== '#') {
-          if (this.ready(this.imgs.floor)) {
-            ctx.drawImage(this.imgs.floor, sx(tx * TILE), sy(ty * TILE), TILE, TILE);
-          } else {
-            ctx.fillStyle = COLORS.floor;
-            ctx.fillRect(sx(tx * TILE), sy(ty * TILE), TILE, TILE);
-          }
-        }
-      }
-    }
-
-
-    // walls
-    ctx.fillStyle = COLORS.wall;
-    for (let ty = y0; ty < y1; ty++) {
-      const row = game.map.tiles[ty];
-      for (let tx = x0; tx < x1; tx++) {
-        if (row[tx] === '#') {
-          if (this.ready(this.imgs.wall)) {
-            ctx.drawImage(this.imgs.wall, Math.round(sx(tx * TILE)), Math.round(sy(ty * TILE)), TILE, TILE);
-          } else {
-            ctx.fillRect(sx(tx * TILE), sy(ty * TILE), TILE, TILE);
-          }
-        }
+        const art = row[tx] === '#' ? wallArt : floorArt;
+        ctx.drawImage(art, 0, 0, TILE, TILE, Math.round(sx(tx * TILE)), Math.round(sy(ty * TILE)), TILE, TILE);
       }
     }
 
     this.drawObjectives(game, sx, sy);
+    this.drawExit(game, sx, sy);
     this.drawPlayers(game, input, now, sx, sy);
     this.drawCrates(game, sx, sy);
+    if (game.role === 'killer') this.drawNoises(game, sx, sy, now);
     this.drawFog(game.fogMode(), input.aim);
     ctx.drawImage(this.fog, 0, 0);
-  }
-
-  // Crates are non-solid props drawn over players, so anyone standing on a
-  // crate tile is visually hidden behind it.
-  drawCrates(game, sx, sy) {
-    const ctx = this.ctx;
-    const S = 32;
-    for (const c of game.crates) {
-      const cx = Math.round(sx(c.x) - S / 2);
-      const cy = Math.round(sy(c.y) - S / 2);
-      if (this.ready(this.imgs.crate)) {
-        ctx.drawImage(this.imgs.crate, cx, cy, S, S);
-      } else {
-        ctx.fillStyle = '#7a5a30';
-        ctx.fillRect(cx, cy, S, S);
-        ctx.strokeStyle = '#4c3a20';
-        ctx.lineWidth = 2;
-        ctx.strokeRect(cx + 1, cy + 1, S - 2, S - 2);
-      }
-    }
   }
 
   drawObjectives(game, sx, sy) {
     const ctx = this.ctx;
     const r = game.config.objectiveRadius;
-    const inRange = game.objectiveInRange();
+    const target = game.actionTarget();
+    const genArt = this.art('generator');
+
     for (const o of game.objectives) {
       const ox = sx(o.x), oy = sy(o.y);
+      ctx.drawImage(genArt, 0, 0, TILE, TILE, Math.round(ox - TILE / 2), Math.round(oy - TILE / 2), TILE, TILE);
+
       if (o.done) {
-        ctx.fillStyle = COLORS.objectiveDone;
-        ctx.beginPath(); ctx.arc(ox, oy, 10, 0, Math.PI * 2); ctx.fill();
         ctx.strokeStyle = COLORS.objectiveDone; ctx.lineWidth = 3;
         ctx.beginPath(); ctx.arc(ox, oy, r, 0, Math.PI * 2); ctx.stroke();
         continue;
@@ -174,32 +154,52 @@ export class Renderer {
         ctx.strokeStyle = COLORS.ring; ctx.lineWidth = 4;
         ctx.beginPath(); ctx.arc(ox, oy, r, -Math.PI / 2, -Math.PI / 2 + o.progress * Math.PI * 2); ctx.stroke();
       }
-      ctx.fillStyle = COLORS.objective;
-      ctx.beginPath(); ctx.arc(ox, oy, 7, 0, Math.PI * 2); ctx.fill();
 
-      if (o === inRange) {
-        ctx.fillStyle = COLORS.prompt;
-        ctx.font = '12px Bungee, monospace';
-        ctx.textAlign = 'center';
-        ctx.fillText('HOLD SPACE', ox, oy - r - 8);
-        ctx.textAlign = 'left';
+      if (target && target.kind === 'repair' && target.x === o.x && target.y === o.y) {
+        this.prompt(ox, oy - r - 8, 'HOLD SPACE');
       }
     }
+  }
+
+  drawExit(game, sx, sy) {
+    if (!game.exit) return;
+    const ctx = this.ctx;
+    const ex = sx(game.exit.x), ey = sy(game.exit.y);
+    const r = game.config.exitRadius;
+
+    // pulsing glow
+    const pulse = 0.5 + 0.5 * Math.sin(performance.now() / 300);
+    ctx.fillStyle = `rgba(67,184,95,${0.10 + 0.12 * pulse})`;
+    ctx.beginPath(); ctx.arc(ex, ey, r + 6, 0, Math.PI * 2); ctx.fill();
+
+    ctx.drawImage(this.art('exit'), 0, 0, TILE, TILE, Math.round(ex - TILE / 2), Math.round(ey - TILE / 2), TILE, TILE);
+
+    ctx.strokeStyle = COLORS.objectiveDone; ctx.lineWidth = 3;
+    ctx.beginPath(); ctx.arc(ex, ey, r, 0, Math.PI * 2); ctx.stroke();
+
+    // own escape progress
+    const me = game.selfEntry();
+    if (me && typeof me.esc === 'number' && me.esc > 0 && game.localState === 'up') {
+      ctx.strokeStyle = '#a0ffb0'; ctx.lineWidth = 4;
+      ctx.beginPath(); ctx.arc(ex, ey, r, -Math.PI / 2, -Math.PI / 2 + me.esc * Math.PI * 2); ctx.stroke();
+    }
+
+    const target = game.actionTarget();
+    if (target && target.kind === 'escape') this.prompt(ex, ey - r - 8, 'HOLD SPACE TO ESCAPE');
   }
 
   drawPlayers(game, input, now, sx, sy) {
     const ctx = this.ctx;
     const maxHp = game.config.survivorHp;
+    const target = game.actionTarget();
+
     for (const p of game.renderPlayers(now)) {
       const px = sx(p.x), py = sy(p.y);
       const isKiller = p.role === 'killer';
-      const facing = (p.self && isKiller) ? input.aim
-        : (p.self && !isKiller) ? input.aim
-        : (p.aim || 0);
+      const facing = p.self ? input.aim : (p.aim || 0);
       const dir = facingDir(facing);
 
-      if (!p.alive) {
-        // downed marker
+      if (p.state === 'dead') {
         ctx.strokeStyle = COLORS.dead; ctx.lineWidth = 3;
         ctx.beginPath();
         ctx.moveTo(px - 7, py - 7); ctx.lineTo(px + 7, py + 7);
@@ -216,57 +216,90 @@ export class Renderer {
           ctx.arc(px, py, reach, facing - SWING_ARC, facing + SWING_ARC);
           ctx.closePath(); ctx.fill();
         }
-        if (this.ready(this.imgs.killer)) {
-          const [col, row] = killerFrame(dir);
-          this.drawSprite(this.imgs.killer, col * KILL_SIZE, row * KILL_SIZE, KILL_SIZE, KILL_SIZE, px, py, null, 0);
-        } else {
-          ctx.fillStyle = COLORS.killer;
-          ctx.beginPath(); ctx.arc(px, py, game.config.killerRadius, 0, Math.PI * 2); ctx.fill();
-          ctx.strokeStyle = COLORS.killer; ctx.lineWidth = 3;
-          ctx.beginPath(); ctx.moveTo(px, py);
-          ctx.lineTo(px + Math.cos(facing) * (game.config.killerRadius + 10), py + Math.sin(facing) * (game.config.killerRadius + 10));
-          ctx.stroke();
-        }
+        const K = SPRITES.killer.frame;
+        this.drawFrame('killer', frameFor(dir) * K, K, px, py, null, 0);
         continue;
       }
 
       // survivor
+      const S = SPRITES.survivor.frame;
       const frac = maxHp ? Math.max(0, p.hp ?? maxHp) / maxHp : 1;
+
+      if (p.state === 'downed') {
+        // dimmed body + bleed-out ring + revive arc
+        this.ctx.globalAlpha = 0.55;
+        this.drawFrame('survivor', frameFor('down') * S, S, px, py, '#d23a3a', 0.4);
+        this.ctx.globalAlpha = 1;
+        if (typeof p.bleed === 'number') {
+          ctx.strokeStyle = 'rgba(210,58,58,0.8)'; ctx.lineWidth = 3;
+          ctx.beginPath(); ctx.arc(px, py, S / 2 + 6, -Math.PI / 2, -Math.PI / 2 + p.bleed * Math.PI * 2); ctx.stroke();
+        }
+        if (typeof p.revive === 'number' && p.revive > 0) {
+          ctx.strokeStyle = '#a0ffb0'; ctx.lineWidth = 4;
+          ctx.beginPath(); ctx.arc(px, py, S / 2 + 10, -Math.PI / 2, -Math.PI / 2 + p.revive * Math.PI * 2); ctx.stroke();
+        }
+        if (target && target.kind === 'revive' && target.x === p.x && target.y === p.y) {
+          this.prompt(px, py - S / 2 - 16, 'HOLD SPACE TO REVIVE');
+        }
+        continue;
+      }
+
       const tint = frac >= 0.999 ? null : hpColor(frac);
       const tintAlpha = (1 - frac) * 0.5;
-
-      if (this.ready(this.imgs.survivor)) {
-        const frameX = survivorFrame(dir);
-        this.drawSprite(this.imgs.survivor, frameX, 0, SURV_SIZE, SURV_SIZE, px, py, tint, tintAlpha);
-        if (p.self) this.selfRing(px, py, SURV_SIZE / 2 + 3);
-      } else {
-        ctx.fillStyle = p.self ? COLORS.self : (tint || '#4ea3ff');
-        ctx.beginPath(); ctx.arc(px, py, game.config.survivorRadius, 0, Math.PI * 2); ctx.fill();
-        if (p.self) this.selfRing(px, py, game.config.survivorRadius + 3);
-      }
+      this.drawFrame('survivor', frameFor(dir) * S, S, px, py, tint, tintAlpha);
+      if (p.self) this.selfRing(px, py, S / 2 + 3);
     }
   }
 
-  // Draw a sprite frame to an offscreen scratch canvas, apply hp tint via
-  // source-atop compositing, then blit to the main canvas. Requires the
-  // sprite PNG to have a transparent background (standard Piskel export).
-  drawSprite(img, sx, sy, sw, sh, cx, cy, tintColor, tintAlpha) {
+  drawCrates(game, sx, sy) {
+    const crateArt = this.art('crate');
+    for (const c of game.crates) {
+      this.ctx.drawImage(crateArt, 0, 0, TILE, TILE, Math.round(sx(c.x) - TILE / 2), Math.round(sy(c.y) - TILE / 2), TILE, TILE);
+    }
+  }
+
+  // Expanding, fading rings where the killer heard something.
+  drawNoises(game, sx, sy, now) {
+    const ctx = this.ctx;
+    for (const n of game.noises) {
+      const age = (now - n.at) / 1200;           // 0..1 over lifetime
+      if (age >= 1) continue;
+      const radius = 10 + age * 36;
+      ctx.strokeStyle = `rgba(255,210,63,${0.85 * (1 - age)})`;
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.arc(sx(n.x), sy(n.y), radius, 0, Math.PI * 2);
+      ctx.stroke();
+    }
+  }
+
+  prompt(x, y, text) {
+    const ctx = this.ctx;
+    ctx.fillStyle = COLORS.prompt;
+    ctx.font = '12px Bungee, monospace';
+    ctx.textAlign = 'center';
+    ctx.fillText(text, x, y);
+    ctx.textAlign = 'left';
+  }
+
+  // Draw one frame from a character sheet via the scratch canvas (for tint).
+  drawFrame(slot, frameX, size, cx, cy, tintColor, tintAlpha) {
     const sc = this.scratchCtx;
-    const dx = Math.round(cx - sw / 2);
-    const dy = Math.round(cy - sh / 2);
-    sc.clearRect(0, 0, sw, sh);
+    const dx = Math.round(cx - size / 2);
+    const dy = Math.round(cy - size / 2);
+    sc.clearRect(0, 0, size, size);
     sc.globalCompositeOperation = 'source-over';
     sc.globalAlpha = 1;
-    sc.drawImage(img, sx, sy, sw, sh, 0, 0, sw, sh);
+    sc.drawImage(this.art(slot), frameX, 0, size, size, 0, 0, size, size);
     if (tintColor && tintAlpha > 0.01) {
       sc.globalCompositeOperation = 'source-atop';
       sc.fillStyle = tintColor;
       sc.globalAlpha = tintAlpha;
-      sc.fillRect(0, 0, sw, sh);
+      sc.fillRect(0, 0, size, size);
       sc.globalAlpha = 1;
       sc.globalCompositeOperation = 'source-over';
     }
-    this.ctx.drawImage(this.scratch, 0, 0, sw, sh, dx, dy, sw, sh);
+    this.ctx.drawImage(this.scratch, 0, 0, size, size, dx, dy, size, size);
   }
 
   selfRing(px, py, r) {
@@ -290,6 +323,8 @@ export class Renderer {
       this.radialHole(f, cx, cy, KILLER_VIEW, [[0, 1], [0.5, 0.9], [0.85, 0.35], [1, 0]]);
     } else if (mode === 'spectate') {
       this.radialHole(f, cx, cy, SPECTATE_VIEW, [[0, 1], [0.7, 0.6], [1, 0]]);
+    } else if (mode === 'downed') {
+      this.radialHole(f, cx, cy, SELF_GLOW * 1.6, [[0, 0.95], [1, 0]]);
     } else {
       this.radialHole(f, cx, cy, SELF_GLOW, [[0, 0.92], [1, 0]]);
       f.save();

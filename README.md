@@ -65,17 +65,35 @@ Use `wss://` (secure), not `ws://`, since GitHub Pages is HTTPS.
 
 - WASD or arrow keys to move
 - Mouse aims (flashlight for survivors, attack direction for the killer)
-- Survivor: hold Space (or E) on a generator to repair it. Two survivors on the same generator repair faster.
-- Killer: Space or left-click to swing (short cooldown), Shift to lunge forward on a longer cooldown. Both deal damage; a hit knocks the survivor back.
+- Survivor: Space is the universal interact key, by priority: revive a downed teammate, channel escape at the open exit, repair a generator. Two survivors on one generator repair faster.
+- Everyone: Shift to sprint (speed burst on a cooldown). For the killer Shift also lunges.
+- Killer: Space or left-click to swing. Hits knock survivors back.
 
-Survivors take three hits to go down. A downed survivor switches to spectator mode and can press A or D to cycle which living player they watch.
+## How a round plays
 
-## How to win
+Survivors take three hits to go down. A downed survivor bleeds out on a timer unless a teammate revives them (hold Space next to them). Dead and escaped players spectate with A / D.
 
-- Survivors complete 3 objectives -> survivors escape and win
-- Killer downs every survivor -> killer wins (downing one while others live does not end the round)
-- Killer disconnects -> survivors win
-- All survivors leave -> killer wins
+Sprinting and repairing make noise: the killer sees yellow pings through the fog where sound happened. Move quietly or pay for the speed.
+
+When every generator is done, an exit opens somewhere on the map. Each survivor must channel at the exit (three times as long as a generator) to escape. The round ends when nobody is left standing: survivors win if at least one escaped, the killer wins otherwise. The killer disconnecting counts as a survivor win.
+
+## Art slots
+
+Drop PNGs into `sprites/` and they render automatically; anything missing shows a labelled placeholder box. Character sheets are 4 frames left to right: down, right, up, left.
+
+| File | Size | What it is |
+|---|---|---|
+| floor.png | 32x32 | floor tile |
+| wall.png | 32x32 | wall tile |
+| crate.png | 32x32 | hide prop |
+| generator.png | 32x32 | objective |
+| exit.png | 32x32 | escape hatch |
+| survivor.png | 128x32 | 4-frame character sheet |
+| killer.png | 192x48 | 4-frame character sheet (48px frames) |
+
+## Sound slots
+
+Drop MP3s into `sounds/`; missing files are silently skipped. See `sounds/README.txt` for the slot list (music, heartbeat that scales with killer proximity, hit, down, revive, generator done, exit open, escaped).
 
 ## Notes
 

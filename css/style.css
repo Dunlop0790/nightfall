@@ -224,6 +224,15 @@ button.ghost:hover { border-color: var(--accent); filter: none; }
 .role.killer { background: rgba(210,72,61,0.2); color: var(--killer); }
 .role.survivor { background: rgba(74,144,217,0.2); color: var(--survivor); }
 .role.dead { background: rgba(120,124,140,0.2); color: var(--muted); }
+.role.escaped { background: rgba(67,184,95,0.2); color: var(--you); }
+
+.escape {
+  color: #a0ffb0;
+  font-weight: 700;
+  letter-spacing: 1px;
+}
+
+.bleed { color: #ff7b6f; }
 
 .pips {
   letter-spacing: 2px;

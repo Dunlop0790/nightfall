@@ -1,7 +1,5 @@
-// Client-side view of the world. Server is authoritative; this smooths it:
-// remote players interpolate between the two latest snapshots, the local player
-// is predicted from input and corrected toward the server. Also tracks
-// spectator focus once the local survivor is downed.
+// Client-side view of the world. Server is authoritative; this smooths it and
+// tracks the local player's life-cycle state: up, downed, dead, escaped.
 
 import { CORRECTION } from './constants.js';
 
@@ -15,10 +13,12 @@ export class Game {
     this.names = new Map();
     this.objectives = [];
     this.crates = [];
+    this.exit = null;
+    this.noises = [];           // recent noise pings (killer only), {x,y,at}
     this.prev = null;
     this.curr = null;
     this.local = null;
-    this.localAlive = true;
+    this.localState = 'up';
     this.localHp = 0;
     this.spectateId = null;
     this.sprintState = 'ready';
@@ -36,10 +36,12 @@ export class Game {
     this.names = new Map(msg.players.map(p => [p.id, p.name]));
     this.objectives = msg.objectives.map(o => ({ x: o.x, y: o.y, progress: 0, done: false }));
     this.crates = msg.crates || [];
+    this.exit = null;
+    this.noises = [];
     this.prev = null;
     this.curr = null;
     this.local = null;
-    this.localAlive = true;
+    this.localState = 'up';
     this.localHp = msg.config.survivorHp;
     this.spectateId = null;
     this.sprintState = 'ready';
@@ -50,11 +52,19 @@ export class Game {
 
   onState(msg) {
     const players = new Map();
-    for (const p of msg.players) {
-      players.set(p.id, { x: p.x, y: p.y, alive: p.alive, hp: p.hp, swing: p.swing, lunging: p.lunging, aim: p.aim });
-    }
+    for (const p of msg.players) players.set(p.id, p);
+
     this.prev = this.curr;
     this.curr = { time: performance.now(), players };
+    this.exit = msg.exit || null;
+
+    if (this.role === 'killer' && msg.noises && msg.noises.length) {
+      const now = performance.now();
+      for (const n of msg.noises) this.noises.push({ x: n.x, y: n.y, at: now });
+    }
+    // Drop pings older than 1.2s.
+    const cutoff = performance.now() - 1200;
+    this.noises = this.noises.filter(n => n.at >= cutoff);
 
     msg.objectives.forEach((o, i) => {
       if (this.objectives[i]) { this.objectives[i].progress = o.progress; this.objectives[i].done = o.done; }
@@ -62,7 +72,7 @@ export class Game {
 
     const mine = players.get(this.you);
     if (mine) {
-      this.localAlive = mine.alive;
+      this.localState = mine.state;
       if (typeof mine.hp === 'number') this.localHp = mine.hp;
       if (!this.local) this.local = { x: mine.x, y: mine.y };
       else {
@@ -92,12 +102,11 @@ export class Game {
   }
 
   predict(dt, input) {
-    if (!this.local || !this.localAlive) return;
+    if (!this.local || this.localState !== 'up') return;
     this.clientElapsed += dt;
     const e = this.clientElapsed;
     const cfg = this.config;
 
-    // Mirror server sprint state machine so local movement feels instant.
     if (this.sprintState === 'active' && e >= this.sprintUntil) {
       this.sprintState = 'cooldown';
       this.sprintCooldownUntil = e + cfg.sprintCooldown;
@@ -143,6 +152,8 @@ export class Game {
     return { x: 0, y: 0 };
   }
 
+  selfEntry() { return this.curr ? this.curr.players.get(this.you) : null; }
+
   alpha(now) {
     if (this.prev && this.curr && this.curr.time > this.prev.time) {
       return Math.max(0, Math.min(1, (now - this.curr.time) / (this.curr.time - this.prev.time)));
@@ -167,27 +178,27 @@ export class Game {
     const out = [];
     for (const [id, role] of this.roles) {
       const cur = this.curr.players.get(id);
+      if (!cur) continue;
+      if (cur.state === 'escaped') continue;   // escaped survivors leave the field
       if (id === this.you) {
         const pos = this.selfPos();
-        out.push({ id, role, x: pos.x, y: pos.y, alive: this.localAlive, hp: this.localHp, self: true, swing: cur ? cur.swing : false, lunging: cur ? cur.lunging : false, aim: cur ? cur.aim : 0 });
+        out.push({ ...cur, role, x: pos.x, y: pos.y, self: true });
         continue;
       }
-      if (!cur) continue;
       const pos = this.interpPos(id, now);
-      out.push({ id, role, x: pos.x, y: pos.y, alive: cur.alive, hp: cur.hp, self: false, swing: cur.swing, lunging: cur.lunging, aim: cur.aim });
+      out.push({ ...cur, role, x: pos.x, y: pos.y, self: false });
     }
     return out;
   }
 
-  // ---- spectator ----
+  // ---- spectator (dead or escaped players watch the living) ----
 
-  // Other players still in the round that a downed survivor can watch.
   spectatable() {
     const ids = [];
-    for (const [id, role] of this.roles) {
+    for (const [id] of this.roles) {
       if (id === this.you) continue;
       const p = this.curr && this.curr.players.get(id);
-      if (p && p.alive) ids.push(id);
+      if (p && (p.state === 'up' || p.state === 'downed')) ids.push(id);
     }
     return ids;
   }
@@ -202,35 +213,53 @@ export class Game {
   }
 
   focusPos(now) {
-    if (this.localAlive) return this.selfPos();
+    // Up and downed players watch themselves; dead and escaped spectate.
+    if (this.localState === 'up' || this.localState === 'downed') return this.selfPos();
     if (!this.spectateId || !this.spectatable().includes(this.spectateId)) this.cycleSpectate(1);
     const p = this.spectateId ? this.interpPos(this.spectateId, now) : null;
     return p || this.selfPos();
   }
 
-  fogMode() { return this.localAlive ? this.role : 'spectate'; }
+  fogMode() {
+    if (this.localState === 'downed') return 'downed';
+    if (this.localState === 'dead' || this.localState === 'escaped') return 'spectate';
+    return this.role;
+  }
 
   doneCount() { return this.objectives.filter(o => o.done).length; }
 
-  aliveSurvivors() {
+  upSurvivors() {
     let n = 0;
     for (const [id, role] of this.roles) {
       if (role !== 'survivor') continue;
-      if (id === this.you) { if (this.localAlive) n++; continue; }
-      const p = this.curr && this.curr.players.get(id);
-      if (p && p.alive) n++;
+      const p = id === this.you
+        ? { state: this.localState }
+        : (this.curr && this.curr.players.get(id));
+      if (p && p.state === 'up') n++;
     }
     return n;
   }
 
-  // Nearest unfinished objective the local survivor is standing in, for the prompt.
-  objectiveInRange() {
-    if (this.role !== 'survivor' || !this.localAlive) return null;
+  // Nearest interactable for the prompt: downed ally, open exit, or generator.
+  actionTarget() {
+    if (this.role !== 'survivor' || this.localState !== 'up' || !this.curr) return null;
     const self = this.selfPos();
-    const r = this.config.objectiveRadius;
+    const d = (o) => Math.hypot(self.x - o.x, self.y - o.y);
+
+    for (const [id, role] of this.roles) {
+      if (role !== 'survivor' || id === this.you) continue;
+      const p = this.curr.players.get(id);
+      if (p && p.state === 'downed' && d(p) <= this.config.reviveRadius) {
+        return { kind: 'revive', x: p.x, y: p.y };
+      }
+    }
+    if (this.exit && d(this.exit) <= this.config.exitRadius) {
+      return { kind: 'escape', x: this.exit.x, y: this.exit.y };
+    }
     for (const o of this.objectives) {
-      if (o.done) continue;
-      if (Math.hypot(self.x - o.x, self.y - o.y) <= r) return o;
+      if (!o.done && d(o) <= this.config.objectiveRadius) {
+        return { kind: 'repair', x: o.x, y: o.y };
+      }
     }
     return null;
   }

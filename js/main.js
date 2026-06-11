@@ -1,15 +1,17 @@
-// Boots the client: connects, drives the lobby UI, runs the render loop with
-// local prediction, sends input at a fixed rate, and handles spectating.
+// Boots the client: connects, drives the lobby, runs the loop, plays audio on
+// game events, and handles spectating.
 
 import { Net } from './network.js';
 import { Input } from './input.js';
 import { Game } from './game.js';
 import { Renderer } from './renderer.js';
+import { AudioManager } from './audio.js';
 
 const isLocal = location.hostname === 'localhost' || location.hostname === '127.0.0.1';
 const SERVER_URL = isLocal ? 'ws://localhost:3000' : 'wss://nightfall-production.up.railway.app';
 
-const INPUT_RATE = 33; // ms between input sends (~30 Hz, matches server tick)
+const INPUT_RATE = 33;
+const HEARTBEAT_RANGE = 480;   // px at which the heartbeat starts
 
 const canvas = document.getElementById('game');
 const $ = (id) => document.getElementById(id);
@@ -17,12 +19,19 @@ const $ = (id) => document.getElementById(id);
 const game = new Game();
 const renderer = new Renderer(canvas);
 const input = new Input(canvas);
+const audio = new AudioManager();
 
 let net = null;
 let myId = null;
 let isHost = false;
 let started = false;
 let inMatch = false;
+
+// Previous-frame values for event detection (sound triggers).
+let prevHp = null;
+let prevState = null;
+let prevDone = 0;
+let prevExit = false;
 
 // ---- DOM ----
 
@@ -46,8 +55,7 @@ function renderLobbyList(players, canStart, killerId) {
     `<li>${escapeHtml(p.name)}${p.host ? ' <span class="tag">host</span>' : ''}${p.id === killerId ? ' <span class="tag killer">killer</span>' : ''}${p.id === myId ? ' <span class="tag you">you</span>' : ''}</li>`
   ).join('');
 
-  const killerBtn = $('killerBtn');
-  killerBtn.textContent = killerId === myId ? 'Pass the killer role' : 'Be the killer';
+  $('killerBtn').textContent = killerId === myId ? 'Pass the killer role' : 'Be the killer';
 
   const startBtn = $('startBtn');
   if (isHost) {
@@ -85,12 +93,17 @@ function onMessage(msg) {
     case 'init':
       game.onInit(msg);
       inMatch = true;
+      prevHp = msg.config.survivorHp;
+      prevState = 'up';
+      prevDone = 0;
+      prevExit = false;
       hideLobby();
       hideBanner();
       ensureLoop();
       break;
     case 'state':
       game.onState(msg);
+      detectSoundEvents();
       updateHud();
       break;
     case 'over': {
@@ -108,6 +121,31 @@ function onMessage(msg) {
   }
 }
 
+// Compare this state to the last one and fire one-shot sounds on transitions.
+function detectSoundEvents() {
+  // generator completed (any)
+  const done = game.doneCount();
+  if (done > prevDone) audio.play('gen_done');
+  prevDone = done;
+
+  // exit opened
+  const exitOpen = !!game.exit;
+  if (exitOpen && !prevExit) audio.play('escape_open');
+  prevExit = exitOpen;
+
+  if (game.role === 'survivor') {
+    if (prevHp !== null && game.localHp < prevHp) audio.play('hit');
+    prevHp = game.localHp;
+
+    if (prevState !== game.localState) {
+      if (game.localState === 'downed') audio.play('down');
+      if (prevState === 'downed' && game.localState === 'up') audio.play('revive');
+      if (game.localState === 'escaped') audio.play('escaped');
+      prevState = game.localState;
+    }
+  }
+}
+
 function pips(hp, max) {
   let s = '';
   for (let i = 0; i < max; i++) s += i < hp ? '\u25c9' : '\u25cb';
@@ -122,27 +160,42 @@ function sprintLabel(info) {
 
 function updateHud() {
   if (!game.config) return;
-  const objs = `${game.doneCount()} / ${game.config.objectivesToWin} objectives`;
-  const alive = `${game.aliveSurvivors()} alive`;
+  const total = game.config.objectivesToWin;
+  const objs = game.exit
+    ? `<span class="escape">EXIT OPEN - ESCAPE!</span>`
+    : `${game.doneCount()} / ${total} generators`;
+  const alive = `${game.upSurvivors()} standing`;
   const sprint = sprintLabel(game.sprintInfo());
 
   if (game.role === 'killer') {
-    setHud(`<span class="role killer">KILLER</span><span>${objs}</span><span>${alive}</span>${sprint}<span class="hint">WASD &middot; mouse aim &middot; SPACE attack &middot; SHIFT sprint/lunge</span>`);
+    setHud(`<span class="role killer">KILLER</span><span>${objs}</span><span>${alive}</span>${sprint}<span class="hint">WASD &middot; SPACE attack &middot; SHIFT sprint/lunge</span>`);
     return;
   }
-  if (!game.localAlive) {
+  if (game.localState === 'downed') {
+    const me = game.selfEntry();
+    const secs = me && typeof me.bleed === 'number' ? Math.ceil(me.bleed * game.config.bleedoutTime) : 0;
+    setHud(`<span class="role dead">DOWNED</span><span class="bleed">bleeding out: ${secs}s</span><span>${objs}</span><span class="hint">a teammate can revive you</span>`);
+    return;
+  }
+  if (game.localState === 'dead') {
     const name = game.spectateId ? escapeHtml(game.names.get(game.spectateId) || '') : '';
-    setHud(`<span class="role dead">DOWNED</span><span>${objs}</span><span>${alive}</span><span class="hint">spectating ${name} &middot; A / D to switch</span>`);
+    setHud(`<span class="role dead">DEAD</span><span>${objs}</span><span>${alive}</span><span class="hint">spectating ${name} &middot; A / D to switch</span>`);
+    return;
+  }
+  if (game.localState === 'escaped') {
+    const name = game.spectateId ? escapeHtml(game.names.get(game.spectateId) || '') : '';
+    setHud(`<span class="role escaped">ESCAPED</span><span>${alive}</span><span class="hint">spectating ${name} &middot; A / D to switch</span>`);
     return;
   }
   const hp = `<span class="pips">${pips(game.localHp, game.config.survivorHp)}</span>`;
-  setHud(`<span class="role survivor">SURVIVOR</span>${hp}<span>${objs}</span><span>${alive}</span>${sprint}<span class="hint">WASD &middot; mouse aim &middot; SHIFT sprint &middot; hold SPACE on generator</span>`);
+  setHud(`<span class="role survivor">SURVIVOR</span>${hp}<span>${objs}</span><span>${alive}</span>${sprint}<span class="hint">WASD &middot; SHIFT sprint &middot; SPACE interact</span>`);
 }
 
 // ---- spectator switching ----
 
 window.addEventListener('keydown', (e) => {
-  if (!inMatch || game.role !== 'survivor' || game.localAlive) return;
+  if (!inMatch || game.role !== 'survivor') return;
+  if (game.localState !== 'dead' && game.localState !== 'escaped') return;
   if (e.code === 'ArrowLeft' || e.code === 'KeyA') { game.cycleSpectate(-1); updateHud(); }
   if (e.code === 'ArrowRight' || e.code === 'KeyD') { game.cycleSpectate(1); updateHud(); }
 });
@@ -164,13 +217,33 @@ function frame(now) {
   if (game.config && game.map) {
     game.predict(dt, input.snapshot());
     renderer.draw(game, input, now);
+    updateHeartbeat();
   }
   requestAnimationFrame(frame);
 }
 
+// Heartbeat volume scales with killer proximity, for up survivors only.
+function updateHeartbeat() {
+  if (game.role !== 'survivor' || game.localState !== 'up' || !game.curr) {
+    audio.setHeartbeat(0);
+    return;
+  }
+  let killerPos = null;
+  for (const [id, role] of game.roles) {
+    if (role === 'killer') { killerPos = game.curr.players.get(id); break; }
+  }
+  if (!killerPos) { audio.setHeartbeat(0); return; }
+  const self = game.selfPos();
+  const d = Math.hypot(self.x - killerPos.x, self.y - killerPos.y);
+  audio.setHeartbeat(Math.max(0, 1 - d / HEARTBEAT_RANGE));
+}
+
 // ---- start ----
 
-$('joinBtn').onclick = () => net.send({ t: 'join', name: $('nameInput').value.trim() || 'Player' });
+$('joinBtn').onclick = () => {
+  audio.unlock();   // user gesture: browser now allows playback
+  net.send({ t: 'join', name: $('nameInput').value.trim() || 'Player' });
+};
 $('nameInput').addEventListener('keydown', (e) => { if (e.key === 'Enter') $('joinBtn').click(); });
 $('startBtn').onclick = () => net.send({ t: 'start' });
 $('killerBtn').onclick = () => net.send({ t: 'claimKiller' });
