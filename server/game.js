@@ -17,7 +17,7 @@ import {
   NOISE_SPRINT_INTERVAL, NOISE_REPAIR_INTERVAL,
   MIN_PLAYERS_TO_START,
 } from './constants.js';
-import { buildMap, pickSpawns, sampleObjectives, sampleCrates } from './map.js';
+import { buildMap, pickSpawns, sampleObjectives, sampleCrates, pickExitSite } from './map.js';
 
 const PHASE = { LOBBY: 'lobby', PLAYING: 'playing', OVER: 'over' };
 
@@ -55,7 +55,10 @@ export class Room {
     this.map = null;
     this.objectives = [];
     this.crates = [];
-    this.exit = null;          // {x,y} once all generators are done
+    this.exitSite = null;      // { gap: [4 border tiles], button: {x,y} } once gens are done
+    this.exitCharge = 0;       // team channel progress toward opening the breach
+    this.exitOpen = false;
+    this.gapSet = null;        // 'x,y' tile keys of the breach
     this.noises = [];          // pings emitted this tick, sent to the killer
     this.winner = null;
     this.elapsed = 0;
@@ -89,7 +92,6 @@ export class Room {
       sprintCooldownUntil: 0,
       bleedOutAt: 0,
       reviveProgress: 0,
-      escapeProgress: 0,
       lastNoiseAt: -999,
     });
     if (this.phase === PHASE.PLAYING) this.sendTo(id, { t: 'wait' });
@@ -142,7 +144,10 @@ export class Room {
     this.map = buildMap();
     this.winner = null;
     this.elapsed = 0;
-    this.exit = null;
+    this.exitSite = null;
+    this.exitCharge = 0;
+    this.exitOpen = false;
+    this.gapSet = null;
     this.noises = [];
 
     const spawns = pickSpawns(this.map);
@@ -174,7 +179,6 @@ export class Room {
       pl.sprintCooldownUntil = 0;
       pl.bleedOutAt = 0;
       pl.reviveProgress = 0;
-      pl.escapeProgress = 0;
       pl.lastNoiseAt = -999;
 
       if (pid === killerId) {
@@ -263,7 +267,8 @@ export class Room {
 
     this.tickBleedouts();
     this.resolveActions();
-    this.maybeOpenExit();
+    this.maybeSpawnExit();
+    this.resolveEscapes();
     this.checkWin();
 
     if (this.phase === PHASE.PLAYING) {
@@ -416,6 +421,7 @@ export class Room {
     const downed = survivors.filter(s => s.state === 'downed');
 
     const genWorkers = new Map();   // objective -> worker count
+    let exitWorkers = 0;
 
     for (const s of up) {
       if (!s.input.action) continue;
@@ -432,9 +438,12 @@ export class Room {
         continue;
       }
 
-      if (this.exit && dist(s, this.exit) <= EXIT_RADIUS) {
-        s.escapeProgress += DT;
-        if (s.escapeProgress >= ESCAPE_TIME) s.state = 'escaped';
+      if (this.exitSite && !this.exitOpen && dist(s, this.exitSite.button) <= EXIT_RADIUS) {
+        exitWorkers++;
+        if (this.elapsed - s.lastNoiseAt >= NOISE_REPAIR_INTERVAL) {
+          s.lastNoiseAt = this.elapsed;
+          this.noises.push({ x: Math.round(s.x), y: Math.round(s.y) });
+        }
         continue;
       }
 
@@ -454,15 +463,44 @@ export class Room {
       obj.progress += DT * rate;
       if (obj.progress >= OBJECTIVE_TIME) { obj.progress = OBJECTIVE_TIME; obj.done = true; }
     }
+
+    if (exitWorkers > 0) {
+      const rate = Math.min(OBJECTIVE_MAX_RATE, 1 + 0.5 * (exitWorkers - 1));
+      this.exitCharge += DT * rate;
+      if (this.exitCharge >= ESCAPE_TIME) this.openBreach();
+    }
   }
 
-  maybeOpenExit() {
-    if (this.exit) return;
+  // The button is fully loaded: tear the 4-tile gap out of the border wall and
+  // tell every client to patch its map.
+  openBreach() {
+    this.exitOpen = true;
+    for (const t of this.exitSite.gap) {
+      this.map.grid[t.y][t.x] = '.';
+      this.map.tiles[t.y] = this.map.grid[t.y].join('');
+    }
+    this.broadcast({ t: 'breach', tiles: this.exitSite.gap });
+  }
+
+  maybeSpawnExit() {
+    if (this.exitSite) return;
     if (this.objectives.length === 0) return;
     if (!this.objectives.every(o => o.done)) return;
-    // The exit opens at a random generator-style spot.
-    const spot = sampleObjectives(this.map, 1)[0];
-    this.exit = { x: spot.x, y: spot.y };
+    this.exitSite = pickExitSite(this.map);
+    this.exitCharge = 0;
+    this.exitOpen = false;
+    this.gapSet = new Set(this.exitSite.gap.map(t => `${t.x},${t.y}`));
+  }
+
+  // Once the breach is open, any up survivor who walks into it escapes.
+  resolveEscapes() {
+    if (!this.exitOpen) return;
+    for (const s of this.players.values()) {
+      if (s.role !== 'survivor' || s.state !== 'up') continue;
+      const tx = Math.floor(s.x / 32);
+      const ty = Math.floor(s.y / 32);
+      if (this.gapSet.has(`${tx},${ty}`)) s.state = 'escaped';
+    }
   }
 
   checkWin() {
@@ -511,9 +549,6 @@ export class Room {
           entry.bleed = Math.round(Math.max(0, (p.bleedOutAt - this.elapsed) / BLEEDOUT_TIME) * 100) / 100;
           entry.revive = Math.round((p.reviveProgress / REVIVE_TIME) * 100) / 100;
         }
-        if (this.exit) {
-          entry.esc = Math.round((p.escapeProgress / ESCAPE_TIME) * 100) / 100;
-        }
       }
       if (p.role === 'killer') {
         entry.swing = p.swing;
@@ -532,7 +567,12 @@ export class Room {
         progress: Math.round((o.progress / OBJECTIVE_TIME) * 100) / 100,
         done: o.done,
       })),
-      exit: this.exit,
+      exit: this.exitSite ? {
+        x: this.exitSite.button.x,
+        y: this.exitSite.button.y,
+        open: this.exitOpen,
+        charge: Math.min(1, Math.round((this.exitCharge / ESCAPE_TIME) * 100) / 100),
+      } : null,
       noises: this.noises,
     });
   }

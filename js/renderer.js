@@ -95,6 +95,7 @@ export class Renderer {
   draw(game, input, now) {
     const ctx = this.ctx;
     const focus = game.focusPos(now);
+    this.lastFocus = focus;
     const camX = focus.x - this.w / 2;
     const camY = focus.y - this.h / 2;
     const sx = (wx) => wx - camX;
@@ -125,6 +126,7 @@ export class Renderer {
     if (game.role === 'killer') this.drawNoises(game, sx, sy, now);
     this.drawFog(game.fogMode(), input.aim);
     ctx.drawImage(this.fog, 0, 0);
+    this.drawExitIndicator(game);
   }
 
   drawObjectives(game, sx, sy) {
@@ -166,26 +168,56 @@ export class Renderer {
     const ctx = this.ctx;
     const ex = sx(game.exit.x), ey = sy(game.exit.y);
     const r = game.config.exitRadius;
-
-    // pulsing glow
     const pulse = 0.5 + 0.5 * Math.sin(performance.now() / 300);
-    ctx.fillStyle = `rgba(67,184,95,${0.10 + 0.12 * pulse})`;
+
+    if (game.exit.open) {
+      // Breach is open: big inviting glow at the gap.
+      ctx.fillStyle = `rgba(67,184,95,${0.18 + 0.18 * pulse})`;
+      ctx.beginPath(); ctx.arc(ex, ey, r + 22, 0, Math.PI * 2); ctx.fill();
+      return;
+    }
+
+    // Button still charging.
+    ctx.fillStyle = `rgba(67,184,95,${0.08 + 0.10 * pulse})`;
     ctx.beginPath(); ctx.arc(ex, ey, r + 6, 0, Math.PI * 2); ctx.fill();
 
     ctx.drawImage(this.art('exit'), 0, 0, TILE, TILE, Math.round(ex - TILE / 2), Math.round(ey - TILE / 2), TILE, TILE);
 
-    ctx.strokeStyle = COLORS.objectiveDone; ctx.lineWidth = 3;
+    ctx.strokeStyle = COLORS.ringTrack; ctx.lineWidth = 3;
     ctx.beginPath(); ctx.arc(ex, ey, r, 0, Math.PI * 2); ctx.stroke();
-
-    // own escape progress
-    const me = game.selfEntry();
-    if (me && typeof me.esc === 'number' && me.esc > 0 && game.localState === 'up') {
+    if (game.exit.charge > 0) {
       ctx.strokeStyle = '#a0ffb0'; ctx.lineWidth = 4;
-      ctx.beginPath(); ctx.arc(ex, ey, r, -Math.PI / 2, -Math.PI / 2 + me.esc * Math.PI * 2); ctx.stroke();
+      ctx.beginPath(); ctx.arc(ex, ey, r, -Math.PI / 2, -Math.PI / 2 + game.exit.charge * Math.PI * 2); ctx.stroke();
     }
 
     const target = game.actionTarget();
-    if (target && target.kind === 'escape') this.prompt(ex, ey - r - 8, 'HOLD SPACE TO ESCAPE');
+    if (target && target.kind === 'escape') this.prompt(ex, ey - r - 8, 'HOLD SPACE TO LOAD');
+  }
+
+  // A soft glow pinned to the edge of the view, pointing toward the exit when
+  // it is off screen. Shown to everyone once the exit exists.
+  drawExitIndicator(game) {
+    if (!game.exit) return;
+    const ctx = this.ctx;
+    const focus = this.lastFocus;
+    const dx = game.exit.x - focus.x;
+    const dy = game.exit.y - focus.y;
+    const margin = 46;
+    const halfW = this.w / 2 - margin;
+    const halfH = this.h / 2 - margin;
+    if (Math.abs(dx) <= halfW && Math.abs(dy) <= halfH) return;  // on screen
+
+    // Clamp the direction vector to the view rectangle edge.
+    const scale = Math.min(halfW / Math.abs(dx || 1e-6), halfH / Math.abs(dy || 1e-6));
+    const ix = this.w / 2 + dx * scale;
+    const iy = this.h / 2 + dy * scale;
+
+    const pulse = 0.6 + 0.4 * Math.sin(performance.now() / 250);
+    const g = ctx.createRadialGradient(ix, iy, 0, ix, iy, 30);
+    g.addColorStop(0, `rgba(120,255,150,${0.7 * pulse})`);
+    g.addColorStop(1, 'rgba(120,255,150,0)');
+    ctx.fillStyle = g;
+    ctx.beginPath(); ctx.arc(ix, iy, 30, 0, Math.PI * 2); ctx.fill();
   }
 
   drawPlayers(game, input, now, sx, sy) {

@@ -50,6 +50,15 @@ export class Game {
     this.clientElapsed = 0;
   }
 
+  // The server tore the breach open: patch the local map so rendering and
+  // prediction both see floor where the wall was.
+  onBreach(tiles) {
+    for (const t of tiles) {
+      const row = this.map.tiles[t.y];
+      this.map.tiles[t.y] = row.slice(0, t.x) + '.' + row.slice(t.x + 1);
+    }
+  }
+
   onState(msg) {
     const players = new Map();
     for (const p of msg.players) players.set(p.id, p);
@@ -253,7 +262,7 @@ export class Game {
         return { kind: 'revive', x: p.x, y: p.y };
       }
     }
-    if (this.exit && d(this.exit) <= this.config.exitRadius) {
+    if (this.exit && !this.exit.open && d(this.exit) <= this.config.exitRadius) {
       return { kind: 'escape', x: this.exit.x, y: this.exit.y };
     }
     for (const o of this.objectives) {

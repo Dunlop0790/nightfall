@@ -174,3 +174,32 @@ export function sampleCrates(map, n) {
   }
   return chosen.map(t => center(t.x, t.y));
 }
+
+// Exit site: a 4-tile (128px) section of the border wall plus the button spot
+// just inside it. Candidates require clear floor along the whole inside edge
+// so the breach always opens into walkable space.
+export function pickExitSite(map) {
+  const g = map.grid;
+  const cand = [];
+  const span = [0, 1, 2, 3];
+
+  for (let x = 2; x <= map.cols - 6; x++) {
+    if (span.every(i => g[1][x + i] === '.')) {
+      cand.push({ gap: span.map(i => ({ x: x + i, y: 0 })), button: { x: (x + 2) * TILE, y: TILE + TILE / 2 } });
+    }
+    if (span.every(i => g[map.rows - 2][x + i] === '.')) {
+      cand.push({ gap: span.map(i => ({ x: x + i, y: map.rows - 1 })), button: { x: (x + 2) * TILE, y: (map.rows - 2) * TILE + TILE / 2 } });
+    }
+  }
+  for (let y = 2; y <= map.rows - 6; y++) {
+    if (span.every(i => g[y + i][1] === '.')) {
+      cand.push({ gap: span.map(i => ({ x: 0, y: y + i })), button: { x: TILE + TILE / 2, y: (y + 2) * TILE } });
+    }
+    if (span.every(i => g[y + i][map.cols - 2] === '.')) {
+      cand.push({ gap: span.map(i => ({ x: map.cols - 1, y: y + i })), button: { x: (map.cols - 2) * TILE + TILE / 2, y: (y + 2) * TILE } });
+    }
+  }
+
+  if (cand.length === 0) throw new Error('No valid exit site on map borders');
+  return cand[Math.floor(Math.random() * cand.length)];
+}

@@ -101,7 +101,7 @@ const solo = o.progress;
 check('solo repair accrues progress', solo > 0.5);
 room2.setInput(12, {});
 
-// --- exit opens after all gens, escape takes ESCAPE_TIME ---
+// --- exit: button spawns on the border after gens, breach opens, walk out ---
 const room3 = new Room();
 const k3 = stub(), s4 = stub();
 room3.addPlayer(20, 'K', k3);
@@ -109,16 +109,31 @@ room3.addPlayer(21, 'S', s4);
 room3.start(20);
 for (const obj of room3.objectives) { obj.progress = OBJECTIVE_TIME; obj.done = true; }
 room3.update();
-check('exit opens when all gens done', room3.exit !== null);
+check('exit button spawns when all gens done', room3.exitSite !== null);
 check('gens done does not instantly end round', room3.phase === 'playing');
+const gapTiles = room3.exitSite.gap;
+check('breach spans 4 border tiles (128px)', gapTiles.length === 4);
+const onBorder = gapTiles.every(t =>
+  t.x === 0 || t.y === 0 || t.x === room3.map.cols - 1 || t.y === room3.map.rows - 1);
+check('breach tiles sit on the border wall', onBorder);
 
 const E = room3.players.get(21);
-E.x = room3.exit.x; E.y = room3.exit.y;
+E.x = room3.exitSite.button.x; E.y = room3.exitSite.button.y;
 room3.setInput(21, { action: true });
 ticks(room3, ESCAPE_TIME / 2);
-check('half the channel is not enough', E.state === 'up');
+check('half the channel does not open the breach', room3.exitOpen === false);
 ticks(room3, ESCAPE_TIME / 2 + 0.3);
-check('full channel escapes the survivor', E.state === 'escaped');
+check('full channel opens the breach', room3.exitOpen === true);
+check('breach message broadcast with gap tiles', !!last(k3, 'breach') && last(k3, 'breach').tiles.length === 4);
+check('wall tiles became floor', gapTiles.every(t => room3.map.grid[t.y][t.x] === '.'));
+check('channeling alone does not escape', E.state === 'up');
+
+// walk into the breach
+room3.setInput(21, {});
+const g0 = gapTiles[1];
+E.x = g0.x * 32 + 16; E.y = g0.y * 32 + 16;
+room3.update();
+check('walking into the breach escapes', E.state === 'escaped');
 check('escape ends round with survivor win', last(k3, 'over') && last(k3, 'over').winner === 'survivors');
 
 // --- killer win: everyone downed/dead, nobody escaped ---

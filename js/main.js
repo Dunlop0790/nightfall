@@ -31,7 +31,6 @@ let inMatch = false;
 let prevHp = null;
 let prevState = null;
 let prevDone = 0;
-let prevExit = false;
 
 // ---- DOM ----
 
@@ -96,7 +95,6 @@ function onMessage(msg) {
       prevHp = msg.config.survivorHp;
       prevState = 'up';
       prevDone = 0;
-      prevExit = false;
       hideLobby();
       hideBanner();
       ensureLoop();
@@ -105,6 +103,10 @@ function onMessage(msg) {
       game.onState(msg);
       detectSoundEvents();
       updateHud();
+      break;
+    case 'breach':
+      game.onBreach(msg.tiles);
+      audio.play('escape_open');
       break;
     case 'over': {
       const title = msg.winner === 'killer' ? 'The Killer wins' : 'The Survivors escaped';
@@ -127,11 +129,6 @@ function detectSoundEvents() {
   const done = game.doneCount();
   if (done > prevDone) audio.play('gen_done');
   prevDone = done;
-
-  // exit opened
-  const exitOpen = !!game.exit;
-  if (exitOpen && !prevExit) audio.play('escape_open');
-  prevExit = exitOpen;
 
   if (game.role === 'survivor') {
     if (prevHp !== null && game.localHp < prevHp) audio.play('hit');
@@ -162,7 +159,9 @@ function updateHud() {
   if (!game.config) return;
   const total = game.config.objectivesToWin;
   const objs = game.exit
-    ? `<span class="escape">EXIT OPEN - ESCAPE!</span>`
+    ? (game.exit.open
+        ? `<span class="escape">BREACH OPEN - RUN!</span>`
+        : `<span class="escape">LOAD THE EXIT: ${Math.round(game.exit.charge * 100)}%</span>`)
     : `${game.doneCount()} / ${total} generators`;
   const alive = `${game.upSurvivors()} standing`;
   const sprint = sprintLabel(game.sprintInfo());
