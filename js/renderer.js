@@ -4,6 +4,7 @@
 
 import {
   KILLER_VIEW, FLASH_RANGE, FLASH_HALF_ANGLE, SELF_GLOW, SPECTATE_VIEW, FOG_ALPHA,
+  KILLER_GLOW_SCALE, PANIC_RANGE,
   COLORS, hpColor,
 } from './constants.js';
 import { SPRITES, PLACEHOLDER_COLORS } from './assets.js';
@@ -126,7 +127,38 @@ export class Renderer {
     if (game.role === 'killer') this.drawNoises(game, sx, sy, now);
     this.drawFog(game.fogMode(), input.aim);
     ctx.drawImage(this.fog, 0, 0);
+    this.drawPanic(game);
     this.drawExitIndicator(game);
+  }
+
+  // Survivor panic: a red vignette that creeps in from the screen edges as the
+  // killer closes distance, pulsing faster the closer he is.
+  drawPanic(game) {
+    if (game.role !== 'survivor' || game.localState !== 'up' || !game.curr) return;
+    let killer = null;
+    for (const [id, role] of game.roles) {
+      if (role === 'killer') { killer = game.curr.players.get(id); break; }
+    }
+    if (!killer) return;
+    const self = game.selfPos();
+    const d = Math.hypot(self.x - killer.x, self.y - killer.y);
+    const intensity = Math.max(0, 1 - d / PANIC_RANGE);
+    if (intensity <= 0.02) return;
+
+    const ctx = this.ctx;
+    // Pulse speeds up as the killer closes: ~1.3Hz far away, ~3.5Hz on top of you.
+    const hz = 1.3 + 2.2 * intensity;
+    const pulse = 0.75 + 0.25 * Math.sin(performance.now() / 1000 * hz * Math.PI * 2);
+    const alpha = 0.38 * intensity * pulse;
+
+    const cx = this.w / 2, cy = this.h / 2;
+    const inner = Math.min(this.w, this.h) * (0.42 - 0.10 * intensity);
+    const outer = Math.hypot(this.w, this.h) / 2;
+    const g = ctx.createRadialGradient(cx, cy, inner, cx, cy, outer);
+    g.addColorStop(0, 'rgba(170,10,10,0)');
+    g.addColorStop(1, `rgba(170,10,10,${alpha})`);
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, this.w, this.h);
   }
 
   drawObjectives(game, sx, sy) {
@@ -241,6 +273,16 @@ export class Renderer {
       }
 
       if (isKiller) {
+        // Menace aura: a pulsing red glow under the sprite. It is drawn below
+        // the fog, so it only shows where the viewer can actually see.
+        const auraR = game.config.killerRadius * KILLER_GLOW_SCALE;
+        const pulse = 0.6 + 0.4 * Math.sin(performance.now() / 220);
+        const aura = ctx.createRadialGradient(px, py, game.config.killerRadius * 0.5, px, py, auraR);
+        aura.addColorStop(0, `rgba(210,40,30,${0.34 * pulse})`);
+        aura.addColorStop(1, 'rgba(210,40,30,0)');
+        ctx.fillStyle = aura;
+        ctx.beginPath(); ctx.arc(px, py, auraR, 0, Math.PI * 2); ctx.fill();
+
         if (p.swing) {
           const reach = game.config.attackRange + game.config.survivorRadius;
           ctx.fillStyle = 'rgba(255,150,140,0.35)';

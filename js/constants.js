@@ -12,6 +12,11 @@ export const FOG_ALPHA = 0.985;
 // Smoothing. Snappy correction so knockback and server nudges resolve quickly.
 export const CORRECTION = 0.35;
 
+// Killer menace. The aura radius is a multiple of the killer's body radius;
+// the panic vignette ramps in as the killer closes within this range.
+export const KILLER_GLOW_SCALE = 2.6;
+export const PANIC_RANGE = 440;
+
 export const COLORS = {
   floor: '#13141a',
   wall: '#2b2f3e',
