@@ -4,13 +4,16 @@
 
 import {
   KILLER_VIEW, FLASH_RANGE, FLASH_HALF_ANGLE, SELF_GLOW, SPECTATE_VIEW, FOG_ALPHA,
-  KILLER_GLOW_SCALE, PANIC_RANGE,
   COLORS, hpColor,
 } from './constants.js';
 import { SPRITES, PLACEHOLDER_COLORS } from './assets.js';
 
 const SWING_ARC = 0.7;
 const TILE = 32;
+
+// Killer menace effects.
+const KILLER_GLOW_SCALE = 2.6;   // aura radius as a multiple of body radius
+const PANIC_RANGE = 440;         // px at which the survivor panic vignette starts
 
 // Character sheets: 4 frames left-to-right: down, right, up, left.
 const FRAME_X = { down: 0, right: 1, up: 2, left: 3 };
@@ -166,10 +169,18 @@ export class Renderer {
     const r = game.config.objectiveRadius;
     const target = game.actionTarget();
     const genArt = this.art('generator');
+    const GEN = SPRITES.generator.size;
+    // Frame count auto-detected from sheet width: any number of 64px frames.
+    const frames = Math.max(1, Math.floor(genArt.width / GEN));
 
     for (const o of game.objectives) {
       const ox = sx(o.x), oy = sy(o.y);
-      ctx.drawImage(genArt, 0, 0, TILE, TILE, Math.round(ox - TILE / 2), Math.round(oy - TILE / 2), TILE, TILE);
+
+      // Animation frame follows repair progress; the last frame is "finished".
+      const idx = o.done
+        ? frames - 1
+        : Math.min(frames - 1, Math.floor(o.progress * frames));
+      ctx.drawImage(genArt, idx * GEN, 0, GEN, GEN, Math.round(ox - GEN / 2), Math.round(oy - GEN / 2), GEN, GEN);
 
       if (o.done) {
         ctx.strokeStyle = COLORS.objectiveDone; ctx.lineWidth = 3;

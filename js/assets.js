@@ -9,7 +9,9 @@ export const SPRITES = {
   floor:     { src: 'sprites/floor.png',     size: 32 },
   wall:      { src: 'sprites/wall.png',      size: 32 },
   crate:     { src: 'sprites/crate.png',     size: 32 },
-  generator: { src: 'sprites/generator.png', size: 32 },
+  // Generator is a horizontal animation strip: any number of 64x64 frames.
+  // The frame shown follows repair progress; the LAST frame is the finished look.
+  generator: { src: 'sprites/generator.png', size: 64 },
   exit:      { src: 'sprites/exit.png',      size: 32 },
   survivor:  { src: 'sprites/survivor.png',  frame: 32 },
   killer:    { src: 'sprites/killer.png',    frame: 48 },

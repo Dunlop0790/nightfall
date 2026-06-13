@@ -26,7 +26,7 @@ export const LUNGE_SPEED = 360;        // px / second during the dash
 export const LUNGE_DURATION = 0.22;    // seconds the dash lasts
 export const LUNGE_COOLDOWN = 3.0;     // seconds between lunges
 
-export const OBJECTIVE_RADIUS = 30;    // a survivor must be this close to work it
+export const OBJECTIVE_RADIUS = 42;    // a survivor must be this close to work it
 export const OBJECTIVE_TIME = 7;       // worker-seconds to finish one objective
 export const OBJECTIVE_MAX_RATE = 2;   // co-op speed cap (2 = twice as fast)
 export const OBJECTIVES_TO_WIN = 3;
