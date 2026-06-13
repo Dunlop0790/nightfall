@@ -182,25 +182,9 @@ export class Renderer {
         : Math.min(frames - 1, Math.floor(o.progress * frames));
       ctx.drawImage(genArt, idx * GEN, 0, GEN, GEN, Math.round(ox - GEN / 2), Math.round(oy - GEN / 2), GEN, GEN);
 
-      if (o.done) {
-        ctx.strokeStyle = COLORS.objectiveDone; ctx.lineWidth = 3;
-        ctx.beginPath(); ctx.arc(ox, oy, r, 0, Math.PI * 2); ctx.stroke();
-        continue;
-      }
-      if (o.progress > 0) {
-        ctx.fillStyle = 'rgba(255,210,63,0.18)';
-        ctx.beginPath(); ctx.moveTo(ox, oy);
-        ctx.arc(ox, oy, r - 3, -Math.PI / 2, -Math.PI / 2 + o.progress * Math.PI * 2);
-        ctx.closePath(); ctx.fill();
-      }
-      ctx.strokeStyle = COLORS.ringTrack; ctx.lineWidth = 3;
-      ctx.beginPath(); ctx.arc(ox, oy, r, 0, Math.PI * 2); ctx.stroke();
-      if (o.progress > 0) {
-        ctx.strokeStyle = COLORS.ring; ctx.lineWidth = 4;
-        ctx.beginPath(); ctx.arc(ox, oy, r, -Math.PI / 2, -Math.PI / 2 + o.progress * Math.PI * 2); ctx.stroke();
-      }
-
-      if (target && target.kind === 'repair' && target.x === o.x && target.y === o.y) {
+      // The animated sprite shows progress now, so no ring/arc here. Just the
+      // interact prompt when a survivor is standing in range.
+      if (!o.done && target && target.kind === 'repair' && target.x === o.x && target.y === o.y) {
         this.prompt(ox, oy - r - 8, 'HOLD SPACE');
       }
     }
