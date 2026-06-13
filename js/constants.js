@@ -4,7 +4,7 @@
 // Vision.
 export const KILLER_VIEW = 360;        // px radius of killer sight
 export const FLASH_RANGE = 380;        // px length of the survivor flashlight
-export const FLASH_HALF_ANGLE = 0.46;  // radians, half the cone width
+export const FLASH_HALF_ANGLE = 0.56;  // radians, half the cone width
 export const SELF_GLOW = 70;           // px glow around a survivor
 export const SPECTATE_VIEW = 320;      // px radius when watching as a ghost
 export const FOG_ALPHA = 0.985;
