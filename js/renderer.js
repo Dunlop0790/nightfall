@@ -12,8 +12,8 @@ const SWING_ARC = 0.7;
 const TILE = 32;
 
 // Killer menace effects.
-const KILLER_GLOW_SCALE = 2.6;   // aura radius as a multiple of body radius
-const PANIC_RANGE = 440;         // px at which the survivor panic vignette starts
+const KILLER_GLOW_SCALE = 5.0;   // aura radius as a multiple of body radius
+const PANIC_RANGE = 460;         // px at which the survivor panic vignette starts
 
 // Character sheets: 4 frames left-to-right: down, right, up, left.
 const FRAME_X = { down: 0, right: 1, up: 2, left: 3 };
@@ -151,15 +151,17 @@ export class Renderer {
     const ctx = this.ctx;
     // Pulse speeds up as the killer closes: ~1.3Hz far away, ~3.5Hz on top of you.
     const hz = 1.3 + 2.2 * intensity;
-    const pulse = 0.75 + 0.25 * Math.sin(performance.now() / 1000 * hz * Math.PI * 2);
-    const alpha = 0.38 * intensity * pulse;
+    const pulse = 0.78 + 0.22 * Math.sin(performance.now() / 1000 * hz * Math.PI * 2);
+    const alpha = (0.18 + 0.55 * intensity) * pulse;
 
     const cx = this.w / 2, cy = this.h / 2;
-    const inner = Math.min(this.w, this.h) * (0.42 - 0.10 * intensity);
-    const outer = Math.hypot(this.w, this.h) / 2;
+    // Inner edge pulls in as the killer closes, so the red squeezes the view.
+    const minDim = Math.min(this.w, this.h);
+    const inner = minDim * (0.34 - 0.20 * intensity);
+    const outer = minDim * 0.62;
     const g = ctx.createRadialGradient(cx, cy, inner, cx, cy, outer);
-    g.addColorStop(0, 'rgba(170,10,10,0)');
-    g.addColorStop(1, `rgba(170,10,10,${alpha})`);
+    g.addColorStop(0, 'rgba(150,8,8,0)');
+    g.addColorStop(1, `rgba(150,8,8,${alpha})`);
     ctx.fillStyle = g;
     ctx.fillRect(0, 0, this.w, this.h);
   }
@@ -268,13 +270,14 @@ export class Renderer {
       }
 
       if (isKiller) {
-        // Menace aura: a pulsing red glow under the sprite. It is drawn below
-        // the fog, so it only shows where the viewer can actually see.
+        // Menace aura: a big pulsing red glow under the sprite. Drawn below the
+        // fog so it only shows where the viewer can actually see the killer.
         const auraR = game.config.killerRadius * KILLER_GLOW_SCALE;
-        const pulse = 0.6 + 0.4 * Math.sin(performance.now() / 220);
-        const aura = ctx.createRadialGradient(px, py, game.config.killerRadius * 0.5, px, py, auraR);
-        aura.addColorStop(0, `rgba(210,40,30,${0.34 * pulse})`);
-        aura.addColorStop(1, 'rgba(210,40,30,0)');
+        const pulse = 0.65 + 0.35 * Math.sin(performance.now() / 200);
+        const aura = ctx.createRadialGradient(px, py, 0, px, py, auraR);
+        aura.addColorStop(0, `rgba(235,30,25,${0.6 * pulse})`);
+        aura.addColorStop(0.45, `rgba(215,25,20,${0.32 * pulse})`);
+        aura.addColorStop(1, 'rgba(215,25,20,0)');
         ctx.fillStyle = aura;
         ctx.beginPath(); ctx.arc(px, py, auraR, 0, Math.PI * 2); ctx.fill();
 
