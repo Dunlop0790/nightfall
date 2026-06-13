@@ -157,8 +157,8 @@ export class Renderer {
     const cx = this.w / 2, cy = this.h / 2;
     // Inner edge pulls in as the killer closes, so the red squeezes the view.
     const minDim = Math.min(this.w, this.h);
-    const inner = minDim * (0.34 - 0.20 * intensity);
-    const outer = minDim * 0.62;
+    const inner = minDim * (0.30 - 0.20 * intensity);
+    const outer = minDim * 0.50;
     const g = ctx.createRadialGradient(cx, cy, inner, cx, cy, outer);
     g.addColorStop(0, 'rgba(150,8,8,0)');
     g.addColorStop(1, `rgba(150,8,8,${alpha})`);
