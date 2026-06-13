@@ -8,7 +8,8 @@
 export const SPRITES = {
   floor:     { src: 'sprites/floor.png',     size: 32 },
   wall:      { src: 'sprites/wall.png',      size: 32 },
-  crate:     { src: 'sprites/crate.png',     size: 32 },
+  crate:     { src: 'sprites/crate.png',     size: 48 },
+  medkit:    { src: 'sprites/medkit.png',    size: 32 },
   // Generator is a horizontal animation strip: any number of 64x64 frames.
   // The frame shown follows repair progress; the LAST frame is the finished look.
   generator: { src: 'sprites/generator.png', size: 64 },
@@ -22,6 +23,7 @@ export const PLACEHOLDER_COLORS = {
   floor: '#1d1f28',
   wall: '#2b2f3e',
   crate: '#7a5a30',
+  medkit: '#e8534e',
   generator: '#ffd23f',
   exit: '#43b85f',
   survivor: '#4ea3ff',

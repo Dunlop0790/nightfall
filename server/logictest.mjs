@@ -203,5 +203,32 @@ check('unclaim clears elect', last(h9, 'lobby').killer === null);
 room9.start(80);
 check('host is killer by default', last(h9, 'init').role === 'killer');
 
+// --- med kit: injured survivor walking onto one heals to full ---
+const roomM = new Room();
+const km = stub(), sm = stub();
+roomM.addPlayer(90, 'K', km);
+roomM.addPlayer(91, 'S', sm);
+roomM.start(90);
+const initM = last(sm, 'init');
+check('init carries medkits', Array.isArray(initM.medkits) && initM.medkits.length > 0);
+const SM = roomM.players.get(91);
+SM.hp = 1;
+const kit = roomM.medkits[0];
+SM.x = kit.x; SM.y = kit.y;
+roomM.update();
+check('walking onto a medkit heals to full', SM.hp === SURVIVOR_HP);
+check('used medkit is removed', roomM.medkits.find(m => m.id === kit.id) === undefined);
+check('medkit removal broadcast', !!last(km, 'medkit'));
+
+// full-health survivor does not consume a kit
+const kit2 = roomM.medkits[0];
+if (kit2) {
+  SM.hp = SURVIVOR_HP;
+  SM.x = kit2.x; SM.y = kit2.y;
+  const before = roomM.medkits.length;
+  roomM.update();
+  check('full-health survivor leaves the kit', roomM.medkits.length === before);
+}
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

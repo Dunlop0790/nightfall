@@ -203,3 +203,16 @@ export function pickExitSite(map) {
   if (cand.length === 0) throw new Error('No valid exit site on map borders');
   return cand[Math.floor(Math.random() * cand.length)];
 }
+
+// Med kits: spread across open floor tiles (same candidate pool as generators,
+// i.e. not hugging walls), spaced apart.
+export function sampleMedkits(map, n) {
+  const pool = [...map.objectiveCandidates];
+  for (let i = pool.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [pool[i], pool[j]] = [pool[j], pool[i]]; }
+  const chosen = [];
+  for (const t of pool) {
+    if (chosen.length >= n) break;
+    if (chosen.every(c => chebyshev(c, t) >= 5)) chosen.push(t);
+  }
+  return chosen.map(t => center(t.x, t.y));
+}

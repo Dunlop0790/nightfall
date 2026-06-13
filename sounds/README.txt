@@ -8,3 +8,5 @@ revive.mp3       you got revived
 gen_done.mp3     any generator completed
 escape_open.mp3  the exit opened
 escaped.mp3      you escaped
+
+(medkit pickup reuses the revive.mp3 slot)

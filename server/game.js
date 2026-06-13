@@ -14,10 +14,10 @@ import {
   OBJECTIVE_RADIUS, OBJECTIVE_TIME, OBJECTIVE_MAX_RATE,
   BLEEDOUT_TIME, REVIVE_TIME, REVIVE_RADIUS, REVIVE_HP,
   ESCAPE_TIME, EXIT_RADIUS,
-  NOISE_SPRINT_INTERVAL, NOISE_REPAIR_INTERVAL,
+  NOISE_SPRINT_INTERVAL, NOISE_REPAIR_INTERVAL, MEDKIT_COUNT,
   MIN_PLAYERS_TO_START,
 } from './constants.js';
-import { buildMap, pickSpawns, sampleObjectives, sampleCrates, pickExitSite } from './map.js';
+import { buildMap, pickSpawns, sampleObjectives, sampleCrates, sampleMedkits, pickExitSite } from './map.js';
 
 const PHASE = { LOBBY: 'lobby', PLAYING: 'playing', OVER: 'over' };
 
@@ -55,6 +55,7 @@ export class Room {
     this.map = null;
     this.objectives = [];
     this.crates = [];
+    this.medkits = [];   // [{id,x,y}] floor pickups, removed when used
     this.exitSite = null;      // { gap: [4 border tiles], button: {x,y} } once gens are done
     this.exitCharge = 0;       // team channel progress toward opening the breach
     this.exitOpen = false;
@@ -202,6 +203,7 @@ export class Room {
     const spots = sampleObjectives(this.map, genCount);
     this.objectives = spots.map(s => ({ x: s.x, y: s.y, progress: 0, done: false }));
     this.crates = sampleCrates(this.map, 24);
+    this.medkits = sampleMedkits(this.map, MEDKIT_COUNT).map((m, i) => ({ id: i, x: m.x, y: m.y }));
 
     this.phase = PHASE.PLAYING;
 
@@ -239,6 +241,7 @@ export class Room {
         map: { cols: this.map.cols, rows: this.map.rows, tiles: this.map.tiles },
         objectives: this.objectives.map(o => ({ x: o.x, y: o.y })),
         crates: this.crates,
+        medkits: this.medkits,
         players: roster,
       });
     }
@@ -266,6 +269,7 @@ export class Room {
     }
 
     this.tickBleedouts();
+    this.resolveMedkits();
     this.resolveActions();
     this.maybeSpawnExit();
     this.resolveEscapes();
@@ -402,6 +406,20 @@ export class Room {
     if (sprinting && this.elapsed - p.lastNoiseAt >= NOISE_SPRINT_INTERVAL) {
       p.lastNoiseAt = this.elapsed;
       this.noises.push({ x: Math.round(p.x), y: Math.round(p.y) });
+    }
+  }
+
+  // An up, injured survivor who walks onto a med kit consumes it and heals to
+  // full. Full-health survivors leave it for someone who needs it.
+  resolveMedkits() {
+    if (this.medkits.length === 0) return;
+    for (const s of this.players.values()) {
+      if (s.role !== 'survivor' || s.state !== 'up' || s.hp >= SURVIVOR_HP) continue;
+      const idx = this.medkits.findIndex(m => dist(s, m) <= SURVIVOR_RADIUS + 16);
+      if (idx === -1) continue;
+      const [used] = this.medkits.splice(idx, 1);
+      s.hp = SURVIVOR_HP;
+      this.broadcast({ t: 'medkit', id: used.id });
     }
   }
 

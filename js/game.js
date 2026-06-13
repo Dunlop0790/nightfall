@@ -13,6 +13,7 @@ export class Game {
     this.names = new Map();
     this.objectives = [];
     this.crates = [];
+    this.medkits = [];
     this.exit = null;
     this.noises = [];           // recent noise pings (killer only), {x,y,at}
     this.prev = null;
@@ -36,6 +37,7 @@ export class Game {
     this.names = new Map(msg.players.map(p => [p.id, p.name]));
     this.objectives = msg.objectives.map(o => ({ x: o.x, y: o.y, progress: 0, done: false }));
     this.crates = msg.crates || [];
+    this.medkits = msg.medkits || [];
     this.exit = null;
     this.noises = [];
     this.prev = null;
@@ -48,6 +50,10 @@ export class Game {
     this.sprintUntil = 0;
     this.sprintCooldownUntil = 0;
     this.clientElapsed = 0;
+  }
+
+  onMedkit(id) {
+    this.medkits = this.medkits.filter(m => m.id !== id);
   }
 
   // The server tore the breach open: patch the local map so rendering and

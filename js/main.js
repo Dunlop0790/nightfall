@@ -108,6 +108,10 @@ function onMessage(msg) {
       game.onBreach(msg.tiles);
       audio.play('escape_open');
       break;
+    case 'medkit':
+      game.onMedkit(msg.id);
+      audio.play('revive');
+      break;
     case 'over': {
       const title = msg.winner === 'killer' ? 'The Killer wins' : 'The Survivors escaped';
       const youWon =

@@ -15,6 +15,10 @@ const TILE = 32;
 const KILLER_GLOW_SCALE = 5.0;   // aura radius as a multiple of body radius
 const PANIC_RANGE = 460;         // px at which the survivor panic vignette starts
 
+// Survivor fog darkness (lower = survivors see more of the map). Killer keeps
+// the full FOG_ALPHA from constants.js.
+const SURVIVOR_FOG_ALPHA = 0.9;
+
 // Character sheets: 4 frames left-to-right: down, right, up, left.
 const FRAME_X = { down: 0, right: 1, up: 2, left: 3 };
 function frameFor(dir) {
@@ -125,6 +129,7 @@ export class Renderer {
 
     this.drawObjectives(game, sx, sy);
     this.drawExit(game, sx, sy);
+    this.drawMedkits(game, sx, sy);
     this.drawPlayers(game, input, now, sx, sy);
     this.drawCrates(game, sx, sy);
     if (game.role === 'killer') this.drawNoises(game, sx, sy, now);
@@ -325,8 +330,17 @@ export class Renderer {
 
   drawCrates(game, sx, sy) {
     const crateArt = this.art('crate');
+    const C = SPRITES.crate.size;
     for (const c of game.crates) {
-      this.ctx.drawImage(crateArt, 0, 0, TILE, TILE, Math.round(sx(c.x) - TILE / 2), Math.round(sy(c.y) - TILE / 2), TILE, TILE);
+      this.ctx.drawImage(crateArt, 0, 0, C, C, Math.round(sx(c.x) - C / 2), Math.round(sy(c.y) - C / 2), C, C);
+    }
+  }
+
+  drawMedkits(game, sx, sy) {
+    const art = this.art('medkit');
+    const M = SPRITES.medkit.size;
+    for (const m of game.medkits) {
+      this.ctx.drawImage(art, 0, 0, M, M, Math.round(sx(m.x) - M / 2), Math.round(sy(m.y) - M / 2), M, M);
     }
   }
 
@@ -386,9 +400,13 @@ export class Renderer {
   drawFog(mode, aim) {
     const f = this.fogCtx;
     const cx = this.w / 2, cy = this.h / 2;
+    // Survivors get a lighter fog so they can make out more of the map; the
+    // killer and spectators stay in near-total darkness.
+    const isSurvivorView = mode === 'survivor' || mode === 'downed';
+    const fillAlpha = isSurvivorView ? SURVIVOR_FOG_ALPHA : FOG_ALPHA;
     f.globalCompositeOperation = 'source-over';
     f.clearRect(0, 0, this.w, this.h);
-    f.fillStyle = `rgba(4,5,9,${FOG_ALPHA})`;
+    f.fillStyle = `rgba(4,5,9,${fillAlpha})`;
     f.fillRect(0, 0, this.w, this.h);
     f.globalCompositeOperation = 'destination-out';
     if (mode === 'killer') {

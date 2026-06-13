@@ -10,7 +10,7 @@ export const TILE = 32;
 // Killer is bigger and faster than survivors, for intimidation and pressure.
 export const KILLER_RADIUS = 15;
 export const SURVIVOR_RADIUS = 10;
-export const KILLER_SPEED = 165;       // px / second
+export const KILLER_SPEED = 152;       // px / second (only slightly above survivors)
 export const SURVIVOR_SPEED = 145;     // px / second
 
 // Combat. The killer does no passive damage; it must swing or lunge.
@@ -35,7 +35,7 @@ export const MIN_PLAYERS_TO_START = 2;
 export const MAX_PLAYERS = 8;
 
 // Sprint: a speed burst available to all players on a cooldown.
-export const SPRINT_MULTIPLIER = 1.55;  // speed factor while sprinting
+export const SPRINT_MULTIPLIER = 1.8;   // speed factor while sprinting
 export const SPRINT_DURATION = 2.2;     // seconds the burst lasts
 export const SPRINT_COOLDOWN = 5.0;     // seconds before sprint is ready again
 
@@ -54,3 +54,6 @@ export const EXIT_RADIUS = 36;         // px to the exit to channel escape
 // Noise pings shown to the killer.
 export const NOISE_SPRINT_INTERVAL = 0.6;  // seconds between pings while sprinting
 export const NOISE_REPAIR_INTERVAL = 1.4;  // seconds between pings while repairing
+
+// Med kits: floor pickups that restore a survivor to full health on contact.
+export const MEDKIT_COUNT = 5;

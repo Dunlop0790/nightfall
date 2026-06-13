@@ -85,7 +85,8 @@ Drop PNGs into `sprites/` and they render automatically; anything missing shows 
 |---|---|---|
 | floor.png | 32x32 | floor tile |
 | wall.png | 32x32 | wall tile |
-| crate.png | 32x32 | hide prop |
+| crate.png | 48x48 | hide prop (killer-sized) |
+| medkit.png | 32x32 | heals a survivor to full |
 | generator.png | 32x32 | objective |
 | exit.png | 32x32 | escape hatch |
 | survivor.png | 128x32 | 4-frame character sheet |
